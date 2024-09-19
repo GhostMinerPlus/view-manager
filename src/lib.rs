@@ -9,6 +9,15 @@ mod inner {
 
     use super::{Node, View, ViewProps};
 
+    pub fn remove_node(node: Node<u64>, view_mp: &mut HashMap<u64, View>) {
+        if node.data != 0 {
+            view_mp.remove(&node.data);
+        }
+        for child_node in node.child_v {
+            remove_node(child_node, view_mp);
+        }
+    }
+
     #[async_recursion::async_recursion]
     pub async fn apply_layout(
         view_id: u64,
@@ -32,13 +41,54 @@ mod inner {
             .await;
         }
 
-        view_mp
-            .get_mut(&view_id)
-            .unwrap()
-            .inner_view
-            .child_v
-            .truncate(props_node.child_v.len());
-        let sub_view_id = view_mp.get(&view_id).unwrap().inner_view.data;
+        let mut sub_view_id = view_mp.get(&view_id).unwrap().inner_view.data;
+        if sub_view_id == 0 {
+            sub_view_id = *unique_id;
+            *unique_id += 1;
+            view_mp.get_mut(&view_id).unwrap().inner_view.data = sub_view_id;
+            view_mp.insert(
+                sub_view_id,
+                View::new(ViewProps {
+                    class: format!(""),
+                    props: json::Null,
+                }),
+            );
+        }
+        let diff = view_mp.get(&view_id).unwrap().inner_view.child_v.len() as i32
+            - props_node.child_v.len() as i32;
+        if diff > 0 {
+            for view_node in view_mp
+                .get_mut(&view_id)
+                .unwrap()
+                .inner_view
+                .child_v
+                .split_off(props_node.child_v.len())
+            {
+                remove_node(view_node, view_mp);
+            }
+        } else if diff < 0 {
+            let mut last_id = *unique_id;
+            view_mp
+                .get_mut(&view_id)
+                .unwrap()
+                .inner_view
+                .child_v
+                .resize_with(props_node.child_v.len(), || {
+                    let new_sub_view_id = last_id;
+                    last_id += 1;
+                    Node::new(new_sub_view_id)
+                });
+            for _ in 0..diff {
+                view_mp.insert(
+                    *unique_id,
+                    View::new(ViewProps {
+                        class: format!(""),
+                        props: json::Null,
+                    }),
+                );
+                *unique_id += 1;
+            }
+        }
         if view_mp.get(&sub_view_id).unwrap().view_props != props_node.data {
             super::apply_props(
                 sub_view_id,
@@ -95,8 +145,6 @@ pub struct ViewProps {
 
 pub struct View {
     view_props: ViewProps,
-    state: json::JsonValue,
-    parent_id: u64,
     inner_view: Node<u64>,
 }
 
@@ -104,8 +152,6 @@ impl View {
     pub fn new(view_props: ViewProps) -> Self {
         Self {
             view_props,
-            state: json::Null,
-            parent_id: 0,
             inner_view: Node::new(0),
         }
     }
@@ -178,6 +224,9 @@ impl ViewManager {
     }
 
     pub fn get_view(&self, id: &u64) -> Option<&View> {
+        if *id == 0 {
+            return None;
+        }
         self.view_mp.get(id)
     }
 }
