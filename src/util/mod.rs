@@ -33,12 +33,12 @@ mod inner {
 
     pub fn parse_child(rs: &json::JsonValue) -> Vec<Node<ViewProps>> {
         let mut child_v = Vec::new();
-        for i in 0..rs["inner"]["class"][0].len() {
-            let class = rs["inner"]["class"][i][0].as_str().unwrap().to_string();
-            let props = slice(&rs, &["inner", "props"], &[i, 0]);
+        for i in 0..rs["child"]["class"][0].len() {
+            let class = rs["child"]["class"][i][0].as_str().unwrap().to_string();
+            let props = slice(&rs, &["child", "props"], &[i, 0]);
             child_v.push(Node::new_with_child_v(
                 ViewProps { class, props },
-                parse_child(&slice(&rs, &["inner"], &[i])),
+                parse_child(&slice(&rs, &["child"], &[i])),
             ));
         }
         child_v

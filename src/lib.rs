@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, future::Future, pin::Pin};
 
 use edge_lib::engine::{EdgeEngine, ScriptTree1};
 
@@ -7,96 +7,67 @@ mod inner {
 
     use edge_lib::engine::{EdgeEngine, ScriptTree1};
 
-    use super::{Node, View, ViewProps};
+    use super::{Node, VNode, ViewProps};
 
-    pub fn remove_node(node: Node<u64>, view_mp: &mut HashMap<u64, View>) {
-        if node.data != 0 {
-            view_mp.remove(&node.data);
-        }
-        for child_node in node.child_v {
-            remove_node(child_node, view_mp);
-        }
-    }
-
-    #[async_recursion::async_recursion]
     pub async fn apply_layout(
-        view_id: u64,
+        vnode_id: u64,
         unique_id: &mut u64,
+        vnode_mp: &mut HashMap<u64, VNode>,
         props_node: &Node<ViewProps>,
         view_class: &HashMap<String, ScriptTree1>,
-        view_mp: &mut HashMap<u64, View>,
         edge_engine: EdgeEngine,
     ) {
-        for i in 0..props_node.child_v.len() {
-            let sub_view_id = view_mp.get(&view_id).unwrap().inner_view.child_v[i].data;
-            let sub_props_node = &props_node.child_v[i];
-            apply_layout(
-                sub_view_id,
-                unique_id,
-                sub_props_node,
-                view_class,
-                view_mp,
-                edge_engine.clone(),
-            )
-            .await;
-        }
+        // let inner_node = vnode_mp
+        //     .get(&vnode_id)
+        //     .unwrap()
+        //     .inner_node_op
+        //     .as_ref()
+        //     .unwrap();
+        // inner_node
+        //     .child_v
+        //     .resize_with(props_node.child_v.len(), || {
+        //         Node::new(VNode::new(ViewProps {
+        //             class: format!(""),
+        //             props: json::Null,
+        //         }))
+        //     });
 
-        let mut sub_view_id = view_mp.get(&view_id).unwrap().inner_view.data;
-        if sub_view_id == 0 {
-            sub_view_id = *unique_id;
-            *unique_id += 1;
-            view_mp.get_mut(&view_id).unwrap().inner_view.data = sub_view_id;
-            view_mp.insert(
-                sub_view_id,
-                View::new(ViewProps {
-                    class: format!(""),
-                    props: json::Null,
-                }),
-            );
-        }
-        let diff = view_mp.get(&view_id).unwrap().inner_view.child_v.len() as i32
-            - props_node.child_v.len() as i32;
-        if diff > 0 {
-            for view_node in view_mp
-                .get_mut(&view_id)
+        for i in 0..props_node.child_v.len() {
+            let child_props_node = &props_node.child_v[i].data;
+            let child_view_id = vnode_mp
+                .get(&vnode_id)
                 .unwrap()
-                .inner_view
-                .child_v
-                .split_off(props_node.child_v.len())
-            {
-                remove_node(view_node, view_mp);
-            }
-        } else if diff < 0 {
-            let mut last_id = *unique_id;
-            view_mp
-                .get_mut(&view_id)
+                .inner_node_op
+                .as_ref()
                 .unwrap()
-                .inner_view
-                .child_v
-                .resize_with(props_node.child_v.len(), || {
-                    let new_sub_view_id = last_id;
-                    last_id += 1;
-                    Node::new(new_sub_view_id)
-                });
-            for _ in 0..diff {
-                view_mp.insert(
-                    *unique_id,
-                    View::new(ViewProps {
-                        class: format!(""),
-                        props: json::Null,
-                    }),
-                );
-                *unique_id += 1;
+                .child_v[i]
+                .data;
+            if vnode_mp.get(&child_view_id).unwrap().view_props != *child_props_node {
+                super::apply_props(
+                    child_view_id,
+                    unique_id,
+                    vnode_mp,
+                    child_props_node,
+                    view_class,
+                    edge_engine.clone(),
+                )
+                .await;
             }
         }
-        if view_mp.get(&sub_view_id).unwrap().view_props != props_node.data {
+        let inner_node = vnode_mp
+            .get(&vnode_id)
+            .unwrap()
+            .inner_node_op
+            .as_ref()
+            .unwrap();
+        if vnode_mp.get(&inner_node.data).unwrap().view_props != props_node.data {
             super::apply_props(
-                sub_view_id,
+                inner_node.data,
                 unique_id,
+                vnode_mp,
                 &props_node.data,
                 view_class,
-                view_mp,
-                edge_engine,
+                edge_engine.clone(),
             )
             .await;
         }
@@ -104,13 +75,14 @@ mod inner {
 
     ///
     pub async fn layout(
-        view_id: u64,
+        view: &VNode,
         view_class: &HashMap<String, ScriptTree1>,
-        view_mp: &mut HashMap<u64, View>,
         edge_engine: EdgeEngine,
     ) -> Option<Node<ViewProps>> {
-        let view = view_mp.get_mut(&view_id).unwrap();
         if let Some(script) = view_class.get(&view.view_props.class) {
+            let edge_engine = edge_engine.divide();
+            // TODO: input props
+
             super::util::execute_as_node(script, edge_engine).await
         } else {
             None
@@ -143,49 +115,74 @@ pub struct ViewProps {
     props: json::JsonValue,
 }
 
-pub struct View {
+pub struct VNode {
     view_props: ViewProps,
-    inner_view: Node<u64>,
+    inner_node_op: Option<Node<u64>>,
 }
 
-impl View {
+impl VNode {
     pub fn new(view_props: ViewProps) -> Self {
         Self {
             view_props,
-            inner_view: Node::new(0),
+            inner_node_op: None,
         }
     }
 }
 
-pub async fn apply_props(
-    view_id: u64,
-    unique_id: &mut u64,
-    props: &ViewProps,
-    view_class: &HashMap<String, ScriptTree1>,
-    view_mp: &mut HashMap<u64, View>,
+pub fn apply_props<'a1, 'a2, 'a3, 'a4, 'f>(
+    vnode_id: u64,
+    unique_id: &'a1 mut u64,
+    vnode_mp: &'a2 mut HashMap<u64, VNode>,
+    props: &'a3 ViewProps,
+    view_class: &'a4 HashMap<String, ScriptTree1>,
     edge_engine: EdgeEngine,
-) {
-    let view = view_mp.get_mut(&view_id).unwrap();
-    view.view_props = props.clone();
+) -> Pin<Box<impl Future<Output = ()> + 'f>>
+where
+    'a1: 'f,
+    'a2: 'f,
+    'a3: 'f,
+    'a4: 'f,
+{
+    Box::pin(async move {
+        vnode_mp.get_mut(&vnode_id).unwrap().view_props = props.clone();
 
-    if let Some(props_node) = inner::layout(view_id, view_class, view_mp, edge_engine.clone()).await
-    {
-        inner::apply_layout(
-            view_id,
-            unique_id,
-            &props_node,
+        if let Some(props_node) = inner::layout(
+            vnode_mp.get(&vnode_id).unwrap(),
             view_class,
-            view_mp,
-            edge_engine,
+            edge_engine.clone(),
         )
-        .await;
-    }
+        .await
+        {
+            if vnode_mp.get(&vnode_id).unwrap().inner_node_op.is_none() {
+                vnode_mp.get_mut(&vnode_id).unwrap().inner_node_op = Some(Node::new(*unique_id));
+                vnode_mp.insert(
+                    *unique_id,
+                    VNode::new(ViewProps {
+                        class: format!(""),
+                        props: json::Null,
+                    }),
+                );
+                *unique_id += 1;
+            }
+            inner::apply_layout(
+                vnode_id,
+                unique_id,
+                vnode_mp,
+                &props_node,
+                view_class,
+                edge_engine,
+            )
+            .await;
+        } else {
+            // TODO: meta element
+        }
+    })
 }
 
 pub struct ViewManager {
     unique_id: u64,
+    vnode_mp: HashMap<u64, VNode>,
     view_class: HashMap<String, ScriptTree1>,
-    view_mp: HashMap<u64, View>,
     edge_engine: EdgeEngine,
 }
 
@@ -196,17 +193,16 @@ impl ViewManager {
         edge_engine: EdgeEngine,
     ) -> Self {
         let mut unique_id = 0;
-        let mut view_mp = HashMap::new();
-
-        view_mp.insert(unique_id, View::new(entry.clone()));
+        let mut vnode_mp = HashMap::new();
+        vnode_mp.insert(unique_id, VNode::new(entry.clone()));
         unique_id += 1;
 
         apply_props(
             0,
             &mut unique_id,
+            &mut vnode_mp,
             &entry,
             &view_class,
-            &mut view_mp,
             edge_engine.clone(),
         )
         .await;
@@ -214,20 +210,17 @@ impl ViewManager {
         Self {
             unique_id,
             view_class,
-            view_mp,
             edge_engine,
+            vnode_mp,
         }
     }
 
-    pub fn get_root(&self) -> &View {
-        &self.view_mp[&0]
+    pub fn get_root(&self) -> &VNode {
+        self.vnode_mp.get(&0).unwrap()
     }
 
-    pub fn get_view(&self, id: &u64) -> Option<&View> {
-        if *id == 0 {
-            return None;
-        }
-        self.view_mp.get(id)
+    pub fn get_vnode(&self, id: &u64) -> Option<&VNode> {
+        self.vnode_mp.get(id)
     }
 }
 
@@ -254,7 +247,7 @@ mod tests {
                 "Main".to_string(),
                 ScriptTree1 {
                     script: vec![format!("$->$:output = ? _")],
-                    name: "inner".to_string(),
+                    name: "child".to_string(),
                     next_v: vec![
                         ScriptTree1 {
                             script: vec![format!("$->$:output = Body _")],
@@ -280,7 +273,9 @@ mod tests {
             let edge_engine = EdgeEngine::new(Arc::new(MemDataManager::new(None)), "root").await;
             let vm = ViewManager::new(view_class, entry, edge_engine).await;
             let root_view = vm.get_root();
-            let inner = vm.get_view(&root_view.inner_view.data).unwrap();
+            let inner = vm
+                .get_vnode(&root_view.inner_node_op.as_ref().unwrap().data)
+                .unwrap();
             assert_eq!(inner.view_props.class, "Body");
             assert_eq!(inner.view_props.props["name"][0], "test");
         });
