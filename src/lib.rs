@@ -82,7 +82,7 @@ mod inner {
         if let Some(script) = view_class.get(&view.view_props.class) {
             let edge_engine = edge_engine.divide();
             // TODO: input props
-
+            
             super::util::execute_as_node(script, edge_engine).await
         } else {
             None
