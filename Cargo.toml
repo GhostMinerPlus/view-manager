@@ -5,8 +5,10 @@ edition = "2021"
 
 [dependencies]
 json = "0.12"
+log = "0.4"
 
 edge_lib = { git = "https://github.com/GhostMinerPlus/edge_lib.git" }
 
 [dev-dependencies]
-tokio = { version = "1.40.0", features = ["full"] }
+env_logger = "0.11"
+tokio = { version = "1.40", features = ["full"] }
