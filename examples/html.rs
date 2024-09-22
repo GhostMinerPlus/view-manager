@@ -14,17 +14,16 @@ mod inner {
     pub fn ser_html(space: &str, id: u64, vnode_mp: &HashMap<u64, VNode>) -> String {
         let vnode = vnode_mp.get(&id).unwrap();
         if vnode.inner_node.data != 0 {
+            // virtual container
             ser_html(&format!("{space}{space}"), vnode.inner_node.data, vnode_mp)
         } else {
-            let mut html = format!(
-                "{space}<{}>",
-                vnode.view_props.class
-            );
-            
-            format!(
-                "{html}\n{space}</{}>",
-                vnode.view_props.class
-            )
+            // meta container
+            let mut html = format!("{space}<{}>", vnode.view_props.class);
+            for child_node in &vnode.inner_node.child_v {
+                let child_html = ser_html(&format!("{space}{space}"), child_node.data, vnode_mp);
+                html = format!("{html}\n{child_html}");
+            }
+            format!("{html}\n{space}</{}>", vnode.view_props.class)
         }
     }
 }
@@ -87,6 +86,7 @@ fn main() {
         let entry = ViewProps {
             class: "Main".to_string(),
             props: json::Null,
+            child_v: vec![],
         };
         let edge_engine = EdgeEngine::new(Arc::new(MemDataManager::new(None)), "root").await;
         let vm = ViewManager::new(
@@ -97,8 +97,9 @@ fn main() {
             Arc::new(|id, vnode_mp| {}),
             Arc::new(|id, vnode_mp| {}),
         )
-        .await;
+        .await
+        .unwrap();
 
-        println!("{}", inner::ser_html("    ", 0, vm.get_vnode_mp()));
+        println!("{}", inner::ser_html("  ", 0, vm.get_vnode_mp()));
     })
 }

@@ -1,9 +1,9 @@
 use edge_lib::engine::{EdgeEngine, ScriptTree1};
 
-use super::{Node, ViewProps};
+use super::ViewProps;
 
 mod inner {
-    use crate::{Node, ViewProps};
+    use crate::ViewProps;
 
     pub fn slice(rs: &json::JsonValue, step_v: &[&str], index_v: &[usize]) -> json::JsonValue {
         let mut new_rs = json::object! {};
@@ -31,15 +31,16 @@ mod inner {
         }
     }
 
-    pub fn parse_child(rs: &json::JsonValue) -> Vec<Node<ViewProps>> {
+    pub fn parse_child(rs: &json::JsonValue) -> Vec<ViewProps> {
         let mut child_v = Vec::new();
         for i in 0..rs["child"]["class"][0].len() {
             let class = rs["child"]["class"][i][0].as_str().unwrap().to_string();
             let props = slice(&rs, &["child", "props"], &[i, 0]);
-            child_v.push(Node::new_with_child_v(
-                ViewProps { class, props },
-                parse_child(&slice(&rs, &["child"], &[i])),
-            ));
+            child_v.push(ViewProps {
+                class,
+                props,
+                child_v: parse_child(&slice(&rs, &["child"], &[i])),
+            });
         }
         child_v
     }
@@ -48,7 +49,7 @@ mod inner {
 pub async fn execute_as_node(
     script: &ScriptTree1,
     mut edge_engine: EdgeEngine,
-) -> Option<Node<ViewProps>> {
+) -> Option<ViewProps> {
     let rs = edge_engine.execute2(script).await.unwrap();
     inner::parse_child(&rs).pop()
 }
