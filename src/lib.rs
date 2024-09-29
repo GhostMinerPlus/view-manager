@@ -1,11 +1,11 @@
 use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
 
-use edge_lib::engine::{EdgeEngine, ScriptTree1};
+use edge_lib::util::engine::EdgeEngine;
 
 mod inner {
     use std::{collections::HashMap, sync::Arc};
 
-    use edge_lib::engine::{EdgeEngine, ScriptTree1};
+    use edge_lib::util::{engine::EdgeEngine, Path};
 
     use crate::err;
 
@@ -58,7 +58,7 @@ mod inner {
         unique_id: &mut u64,
         vnode_mp: &mut HashMap<u64, VNode>,
         view_props: &ViewProps,
-        view_class: &HashMap<String, ScriptTree1>,
+        view_class: &HashMap<String, Vec<String>>,
         edge_engine: EdgeEngine,
         on_create_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>)>,
         on_delete_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>)>,
@@ -112,14 +112,22 @@ mod inner {
     ///
     pub async fn layout(
         view: &VNode,
-        view_class: &HashMap<String, ScriptTree1>,
+        view_class: &HashMap<String, Vec<String>>,
         edge_engine: EdgeEngine,
     ) -> Option<ViewProps> {
         if let Some(script) = view_class.get(&view.view_props.class) {
-            let edge_engine = edge_engine.divide();
-            // TODO: input props
-
-            super::util::execute_as_node(script, edge_engine).await
+            let mut edge_engine = edge_engine.divide();
+            edge_engine
+                .load(&view.view_props.props, &Path::from_str("$->$:input"))
+                .await
+                .unwrap();
+            // for view_props in &view.view_props.child_v {
+            //     edge_engine
+            //         .load(&view_props, &Path::from_str("$->$:input1"))
+            //         .await
+            //         .unwrap();
+            // }
+            Some(super::util::execute_as_node(script, edge_engine).await)
         } else {
             None
         }
@@ -173,7 +181,7 @@ pub fn apply_props<'a1, 'a2, 'a3, 'a4, 'f>(
     unique_id: &'a1 mut u64,
     vnode_mp: &'a2 mut HashMap<u64, VNode>,
     view_props: &'a3 ViewProps,
-    view_class: &'a4 HashMap<String, ScriptTree1>,
+    view_class: &'a4 HashMap<String, Vec<String>>,
     edge_engine: EdgeEngine,
     on_create_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>)>,
     on_delete_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>)>,
@@ -260,7 +268,7 @@ where
 pub struct ViewManager {
     unique_id: u64,
     vnode_mp: HashMap<u64, VNode>,
-    view_class: HashMap<String, ScriptTree1>,
+    view_class: HashMap<String, Vec<String>>,
     edge_engine: EdgeEngine,
     on_create_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>)>,
     on_delete_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>)>,
@@ -269,7 +277,7 @@ pub struct ViewManager {
 
 impl ViewManager {
     pub async fn new(
-        view_class: HashMap<String, ScriptTree1>,
+        view_class: HashMap<String, Vec<String>>,
         entry: ViewProps,
         edge_engine: EdgeEngine,
         on_create_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>)>,

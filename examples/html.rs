@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
-use edge_lib::{
-    data::MemDataManager,
-    engine::{EdgeEngine, ScriptTree1},
+use edge_lib::util::{
+    data::{MemDataManager, TempDataManager},
+    engine::EdgeEngine,
 };
 use view_manager::{ViewManager, ViewProps};
 
@@ -39,56 +39,37 @@ fn main() {
         )
         .init();
 
+        let edge_engine = EdgeEngine::new(
+            Arc::new(TempDataManager::new(Arc::new(MemDataManager::new(None)))),
+            "root",
+        )
+        .await;
+
         let mut view_class = HashMap::new();
+
         view_class.insert(
             "Main".to_string(),
-            ScriptTree1 {
-                script: vec![format!("$->$:output = ? _")],
-                name: "child".to_string(),
-                next_v: vec![
-                    ScriptTree1 {
-                        script: vec![format!("$->$:output = div _")],
-                        name: "class".to_string(),
-                        next_v: vec![],
-                    },
-                    ScriptTree1 {
-                        script: vec![format!("$->$:output = ? _")],
-                        name: "props".to_string(),
-                        next_v: vec![ScriptTree1 {
-                            script: vec![format!("$->$:output = test _")],
-                            name: "name".to_string(),
-                            next_v: vec![],
-                        }],
-                    },
-                    ScriptTree1 {
-                        script: vec![format!("$->$:output = ? _")],
-                        name: "child".to_string(),
-                        next_v: vec![
-                            ScriptTree1 {
-                                script: vec![format!("$->$:output = div _")],
-                                name: "class".to_string(),
-                                next_v: vec![],
-                            },
-                            ScriptTree1 {
-                                script: vec![format!("$->$:output = ? _")],
-                                name: "props".to_string(),
-                                next_v: vec![ScriptTree1 {
-                                    script: vec![format!("$->$:output = test _")],
-                                    name: "name".to_string(),
-                                    next_v: vec![],
-                                }],
-                            },
-                        ],
-                    },
-                ],
-            },
+            vec![
+                format!("$->$:div = ? _"),
+                //
+                format!("$->$:div->$:class = div _"),
+                //
+                format!("$->$:root = ? _"),
+                //
+                format!("$->$:root->$:class = div _"),
+                format!("$->$:root->$:props = _ _"),
+                format!("$->$:root->$:child = $->$:div _"),
+                //
+                format!("$->$:output dump $->$:root $"),
+            ],
         );
+
         let entry = ViewProps {
             class: "Main".to_string(),
             props: json::Null,
             child_v: vec![],
         };
-        let edge_engine = EdgeEngine::new(Arc::new(MemDataManager::new(None)), "root").await;
+
         let vm = ViewManager::new(
             view_class,
             entry,
