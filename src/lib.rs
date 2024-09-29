@@ -121,13 +121,7 @@ mod inner {
                 .load(&view.view_props.props, &Path::from_str("$->$:input"))
                 .await
                 .unwrap();
-            // for view_props in &view.view_props.child_v {
-            //     edge_engine
-            //         .load(&view_props, &Path::from_str("$->$:input1"))
-            //         .await
-            //         .unwrap();
-            // }
-            Some(super::util::execute_as_node(script, edge_engine).await)
+            Some(super::util::execute_as_node(script, &view.view_props.child_v, edge_engine).await)
         } else {
             None
         }
@@ -195,19 +189,14 @@ where
 {
     Box::pin(async move {
         let vnode = vnode_mp.get_mut(&vnode_id).unwrap();
+
         if vnode.view_props.class != view_props.class {
             // TODO: on_delete_element && on_create_element
         }
         vnode.view_props = view_props.clone();
 
-        if let Some(inner_props) = inner::layout(
-            vnode_mp.get(&vnode_id).unwrap(),
-            view_class,
-            edge_engine.clone(),
-        )
-        .await
-        {
-            if vnode_mp.get(&vnode_id).unwrap().inner_node.data == 0 {
+        if let Some(inner_props) = inner::layout(vnode, view_class, edge_engine.clone()).await {
+            if vnode.inner_node.data == 0 {
                 let new_id = *unique_id;
                 *unique_id += 1;
                 vnode_mp.get_mut(&vnode_id).unwrap().inner_node = Node::new(new_id);

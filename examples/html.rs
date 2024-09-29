@@ -53,6 +53,7 @@ fn main() {
                 format!("$->$:div = ? _"),
                 //
                 format!("$->$:div->$:class = div _"),
+                format!("$->$:div->$:child = $child _"),
                 //
                 format!("$->$:root = ? _"),
                 //
@@ -67,7 +68,23 @@ fn main() {
         let entry = ViewProps {
             class: "Main".to_string(),
             props: json::Null,
-            child_v: vec![],
+            child_v: vec![
+                ViewProps {
+                    class: "input".to_string(),
+                    props: json::Null,
+                    child_v: vec![],
+                },
+                ViewProps {
+                    class: "input".to_string(),
+                    props: json::Null,
+                    child_v: vec![],
+                },
+                ViewProps {
+                    class: "input".to_string(),
+                    props: json::Null,
+                    child_v: vec![],
+                },
+            ],
         };
 
         let vm = ViewManager::new(
