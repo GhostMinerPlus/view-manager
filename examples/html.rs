@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use edge_lib::util::{
-    data::{MemDataManager, TempDataManager},
-    engine::EdgeEngine,
+    data::{AsDataManager, MemDataManager},
+    engine::{AsEdgeEngine, EdgeEngine},
 };
 use view_manager::{ViewManager, ViewProps};
 
@@ -35,15 +35,11 @@ fn main() {
         .unwrap();
     rt.block_on(async {
         env_logger::Builder::from_env(
-            env_logger::Env::default().default_filter_or("warn,html=debug,view-manager=debug"),
+            env_logger::Env::default().default_filter_or("warn,html=debug,view_manager=debug"),
         )
         .init();
 
-        let edge_engine = EdgeEngine::new(
-            Arc::new(TempDataManager::new(Arc::new(MemDataManager::new(None)))),
-            "root",
-        )
-        .await;
+        let edge_engine = EdgeEngine::new(Arc::new(MemDataManager::new(None)), "root").await;
 
         let mut view_class = HashMap::new();
 
@@ -57,9 +53,13 @@ fn main() {
                 //
                 format!("$->$:root = ? _"),
                 //
+                format!("$->$:onclick = '$->$:output\\s+\\s1\\s1' _"),
+                //
                 format!("$->$:root->$:class = div _"),
-                format!("$->$:root->$:props = _ _"),
+                format!("$->$:root->$:props = ? _"),
                 format!("$->$:root->$:child = $->$:div _"),
+                //
+                format!("$->$:root->$:props->$:onclick = $->$:onclick _"),
                 //
                 format!("$->$:output dump $->$:root $"),
             ],
@@ -87,16 +87,20 @@ fn main() {
             ],
         };
 
-        let vm = ViewManager::new(
+        let mut vm = ViewManager::new(
             view_class,
             entry,
-            edge_engine,
+            edge_engine
+                .get_dm()
+                .divide(edge_engine.get_dm().get_auth().clone()),
             Arc::new(|id, vnode_mp| {}),
             Arc::new(|id, vnode_mp| {}),
             Arc::new(|id, vnode_mp| {}),
         )
         .await
         .unwrap();
+
+        vm.event_entry(&1, "$:onclick", json::JsonValue::Null).await;
 
         println!("{}", inner::ser_html("  ", 0, vm.get_vnode_mp()));
     })

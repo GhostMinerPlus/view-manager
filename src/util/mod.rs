@@ -1,4 +1,4 @@
-use edge_lib::util::engine::EdgeEngine;
+use edge_lib::util::engine::AsEdgeEngine;
 
 use super::ViewProps;
 
@@ -28,7 +28,7 @@ mod inner {
 pub async fn execute_as_node(
     script: &Vec<String>,
     child_v: &Vec<ViewProps>,
-    mut edge_engine: EdgeEngine,
+    edge_engine: &mut impl AsEdgeEngine,
 ) -> ViewProps {
     let rs = edge_engine.execute_script(script).await.unwrap();
     let root_v = json::parse(&edge_lib::util::rs_2_str(&rs)).unwrap();
