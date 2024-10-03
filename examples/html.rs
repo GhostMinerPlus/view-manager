@@ -109,6 +109,10 @@ impl AsViewManager for ViewManager {
     fn rm_vnode(&mut self, id: u64) -> Option<VNode> {
         self.inner.vnode_mp.remove(&id)
     }
+
+    fn update_vnode_class(&mut self, id: u64, class: &str) {
+        log::info!("update_vnode_class");
+    }
 }
 
 fn main() {

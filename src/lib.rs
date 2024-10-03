@@ -142,6 +142,8 @@ pub trait AsViewManager: AsEdgeEngine {
 
     fn rm_vnode(&mut self, id: u64) -> Option<VNode>;
 
+    fn update_vnode_class(&mut self, id: u64, class: &str);
+
     fn event_entry<'a, 'a1, 'f>(
         &'a mut self,
         id: u64,
@@ -183,12 +185,12 @@ pub trait AsViewManager: AsEdgeEngine {
         Self: Sized,
     {
         Box::pin(async move {
-            let vnode = self.get_vnode_mut(&vnode_id).unwrap();
+            let class = self.get_vnode(&vnode_id).unwrap().view_props.class.clone();
 
-            if vnode.view_props.class != view_props.class {
-                // TODO: on_delete_element && on_create_element
+            if class != view_props.class {
+                self.update_vnode_class(vnode_id, &view_props.class);
             }
-            vnode.view_props = view_props.clone();
+            self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
 
             let vnode = self.get_vnode(&vnode_id).unwrap().clone();
 
