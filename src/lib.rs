@@ -1,101 +1,71 @@
-use std::{cell::RefCell, collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use std::{future::Future, pin::Pin};
 
-use edge_lib::util::{
-    data::{AsDataManager, MemDataManager, TempDataManager},
-    engine::AsEdgeEngine,
-    Path,
-};
+use edge_lib::util::{engine::AsEdgeEngine, Path};
 
 mod inner {
-    use std::collections::HashMap;
+    use edge_lib::util::Path;
 
-    use edge_lib::util::{engine::AsEdgeEngine, Path};
-
-    use crate::{err, ViewManager};
+    use crate::{err, AsViewManager};
 
     use super::{Node, VNode, ViewProps};
 
-    pub fn resize_child(
-        vnode_id: u64,
-        unique_id: &mut u64,
-        vnode_mp: &mut HashMap<u64, VNode>,
-        n_sz: usize,
-    ) {
-        let diff = vnode_mp.get(&vnode_id).unwrap().inner_node.child_v.len() as i32 - n_sz as i32;
+    pub fn resize_child(vnode_id: u64, vm: &mut impl AsViewManager, n_sz: usize) {
+        let diff = vm.get_vnode(&vnode_id).unwrap().inner_node.child_v.len() as i32 - n_sz as i32;
         if diff < 0 {
-            let mut last_id = *unique_id;
-            vnode_mp
-                .get_mut(&vnode_id)
-                .unwrap()
-                .inner_node
-                .child_v
-                .resize_with(n_sz, || {
-                    let new_id = last_id;
-                    last_id += 1;
-                    Node::new(new_id)
-                });
+            let mut arr = Vec::with_capacity(-diff as usize);
             for _ in 0..-diff {
-                let new_id = *unique_id;
-                *unique_id += 1;
-                vnode_mp.insert(
-                    new_id,
-                    VNode::new(ViewProps {
-                        class: format!(""),
-                        props: json::Null,
-                        child_v: vec![],
-                    }),
-                );
+                arr.push(Node::new(vm.new_vnode()));
             }
-        } else if diff > 0 {
-            let extra = vnode_mp
-                .get_mut(&vnode_id)
+            vm.get_vnode_mut(&vnode_id)
                 .unwrap()
                 .inner_node
                 .child_v
-                .split_off(n_sz);
-            // TODO: on_delete_element
+                .extend(arr);
+        } else if diff > 0 {
+            for item in vm
+                .get_vnode_mut(&vnode_id)
+                .unwrap()
+                .inner_node
+                .child_v
+                .split_off(n_sz)
+            {
+                resize_child(item.data, vm, 0);
+                vm.rm_vnode(item.data);
+            }
         }
     }
 
     pub async fn apply_layout(
-        vm: &mut ViewManager,
+        vm: &mut impl AsViewManager,
         vnode_id: u64,
         view_props: &ViewProps,
     ) -> err::Result<()> {
-        resize_child(
-            vnode_id,
-            &mut vm.inner.unique_id,
-            &mut vm.inner.vnode_mp,
-            view_props.child_v.len(),
-        );
+        resize_child(vnode_id, vm, view_props.child_v.len());
 
         for i in 0..view_props.child_v.len() {
             let child_props = &view_props.child_v[i];
-            let child_view_id =
-                vm.inner.vnode_mp.get(&vnode_id).unwrap().inner_node.child_v[i].data;
+            let child_view_id = vm.get_vnode(&vnode_id).unwrap().inner_node.child_v[i].data;
             if vm
-                .inner
-                .vnode_mp
-                .get(&child_view_id)
+                .get_vnode(&child_view_id)
                 .ok_or(err::Error::Other(format!(
                     "no vnode with id: {child_view_id}!"
                 )))?
                 .view_props
                 != *child_props
             {
-                super::apply_props(vm, child_view_id, child_props).await?;
+                vm.apply_props(child_view_id, child_props).await?;
             }
         }
-        let inner_node = &vm.inner.vnode_mp.get(&vnode_id).unwrap().inner_node;
-        if vm.inner.vnode_mp.get(&inner_node.data).unwrap().view_props != *view_props {
-            super::apply_props(vm, inner_node.data, view_props).await?;
+        let inner_node = &vm.get_vnode(&vnode_id).unwrap().inner_node;
+        if vm.get_vnode(&inner_node.data).unwrap().view_props != *view_props {
+            vm.apply_props(inner_node.data, view_props).await?;
         }
         Ok(())
     }
 
     ///
-    pub async fn layout(view: &VNode, vm: &mut ViewManager) -> Option<ViewProps> {
-        if let Some(script) = vm.inner.view_class.get(&view.view_props.class) {
+    pub async fn layout(view: &VNode, vm: &mut impl AsViewManager) -> Option<ViewProps> {
+        if let Some(script) = vm.get_class(&view.view_props.class) {
             vm.load(&view.view_props.props, &Path::from_str("$->$:input"))
                 .await
                 .unwrap();
@@ -161,156 +131,93 @@ impl VNode {
     }
 }
 
-pub fn apply_props<'a1, 'a2, 'f>(
-    vm: &'a1 mut ViewManager,
-    vnode_id: u64,
-    view_props: &'a2 ViewProps,
-) -> Pin<Box<impl Future<Output = err::Result<()>> + 'f>>
-where
-    'a1: 'f,
-    'a2: 'f,
-{
-    Box::pin(async move {
-        let vnode = vm.inner.vnode_mp.get_mut(&vnode_id).unwrap();
+pub trait AsViewManager: AsEdgeEngine {
+    fn get_class(&self, class: &str) -> Option<&Vec<String>>;
 
-        if vnode.view_props.class != view_props.class {
-            // TODO: on_delete_element && on_create_element
-        }
-        vnode.view_props = view_props.clone();
+    fn get_vnode(&self, id: &u64) -> Option<&VNode>;
 
-        let vnode = vm.inner.vnode_mp.get(&vnode_id).unwrap().clone();
+    fn get_vnode_mut(&mut self, id: &u64) -> Option<&mut VNode>;
 
-        if let Some(inner_props) = inner::layout(&vnode.clone(), vm).await {
-            let vnode = vm.inner.vnode_mp.get(&vnode_id).unwrap();
-            if vnode.inner_node.data == 0 {
-                let new_id = vm.inner.unique_id;
-                vm.inner.unique_id += 1;
-                vm.inner.vnode_mp.get_mut(&vnode_id).unwrap().inner_node = Node::new(new_id);
-                vm.inner.vnode_mp.insert(
-                    new_id,
-                    VNode::new(ViewProps {
-                        class: format!(""),
-                        props: json::Null,
-                        child_v: vec![],
-                    }),
-                );
-            }
-            inner::apply_layout(vm, vnode_id, &inner_props).await?;
-        } else {
-            // update meta element
-            inner::resize_child(
-                vnode_id,
-                &mut vm.inner.unique_id,
-                &mut vm.inner.vnode_mp,
-                view_props.child_v.len(),
-            );
-            for i in 0..view_props.child_v.len() {
-                let child_props = &view_props.child_v[i];
-                let child_view_id =
-                    vm.inner.vnode_mp.get(&vnode_id).unwrap().inner_node.child_v[i].data;
-                if vm
-                    .inner
-                    .vnode_mp
-                    .get(&child_view_id)
-                    .ok_or(err::Error::Other(format!(
-                        "no vnode with id: {child_view_id}!"
-                    )))?
-                    .view_props
-                    != *child_props
-                {
-                    apply_props(vm, child_view_id, child_props).await?;
-                }
-            }
-        }
-        Ok(())
-    })
-}
+    fn new_vnode(&mut self) -> u64;
 
-pub struct InnerViewManager {
-    unique_id: u64,
-    vnode_mp: HashMap<u64, VNode>,
-    view_class: HashMap<String, Vec<String>>,
-    on_create_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>) + Send + Sync>,
-    on_delete_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>) + Send + Sync>,
-    on_update_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>) + Send + Sync>,
-}
+    fn rm_vnode(&mut self, id: u64) -> Option<VNode>;
 
-pub struct ViewManager {
-    inner: InnerViewManager,
-    dm: TempDataManager,
-}
-
-impl ViewManager {
-    pub async fn new(
-        view_class: HashMap<String, Vec<String>>,
-        entry: ViewProps,
-        dm: Arc<dyn AsDataManager>,
-        on_create_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>) + Send + Sync>,
-        on_delete_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>) + Send + Sync>,
-        on_update_element: Arc<dyn Fn(u64, &HashMap<u64, VNode>) + Send + Sync>,
-    ) -> err::Result<Self> {
-        let mut unique_id = 0;
-        let mut vnode_mp = HashMap::new();
-        vnode_mp.insert(unique_id, VNode::new(entry.clone()));
-        unique_id += 1;
-
-        let mut this = Self {
-            inner: InnerViewManager {
-                unique_id,
-                view_class,
-                vnode_mp,
-                on_create_element,
-                on_delete_element,
-                on_update_element,
-            },
-            dm: TempDataManager::new(dm),
-        };
-
-        apply_props(&mut this, 0, &entry).await?;
-
-        Ok(this)
-    }
-
-    pub fn get_root(&self) -> &VNode {
-        self.inner.vnode_mp.get(&0).unwrap()
-    }
-
-    pub fn get_vnode(&self, id: &u64) -> Option<&VNode> {
-        self.inner.vnode_mp.get(id)
-    }
-
-    pub async fn event_entry(&mut self, id: &u64, entry_name: &str, event: json::JsonValue) {
-        log::debug!("event_entry: {entry_name}");
-        if let Some(vnode) = self.inner.vnode_mp.get(id) {
-            log::debug!("event_entry: props={}", vnode.view_props.props);
-            self.load(&event, &Path::from_str("$->$:input"))
-                .await
-                .unwrap();
-            for listener in vnode.view_props.props[entry_name].clone().members() {
-                let rs = self
-                    .execute_script(&vec![format!("{}", listener.as_str().unwrap())])
+    fn event_entry<'a, 'a1, 'f>(
+        &'a mut self,
+        id: u64,
+        entry_name: &'a1 str,
+        event: json::JsonValue,
+    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + Send + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f,
+        Self: Sized,
+    {
+        Box::pin(async move {
+            log::debug!("event_entry: {entry_name}");
+            if let Some(vnode) = self.get_vnode(&id) {
+                log::debug!("event_entry: props={}", vnode.view_props.props);
+                self.load(&event, &Path::from_str("$->$:input"))
                     .await
                     .unwrap();
-                log::debug!("{:?}", rs);
+                for listener in vnode.view_props.props[entry_name].clone().members() {
+                    let rs = self
+                        .execute_script(&vec![format!("{}", listener.as_str().unwrap())])
+                        .await
+                        .unwrap();
+                    log::debug!("{:?}", rs);
+                }
             }
-        }
+            Ok(())
+        })
     }
 
-    pub fn get_vnode_mp(&self) -> &HashMap<u64, VNode> {
-        &self.inner.vnode_mp
-    }
-}
+    fn apply_props<'a, 'a1, 'f>(
+        &'a mut self,
+        vnode_id: u64,
+        view_props: &'a1 ViewProps,
+    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f,
+        Self: Sized,
+    {
+        Box::pin(async move {
+            let vnode = self.get_vnode_mut(&vnode_id).unwrap();
 
-impl AsEdgeEngine for ViewManager {
-    fn get_dm(&self) -> &TempDataManager {
-        &self.dm
-    }
+            if vnode.view_props.class != view_props.class {
+                // TODO: on_delete_element && on_create_element
+            }
+            vnode.view_props = view_props.clone();
 
-    fn reset(&mut self) {
-        self.dm.temp = Arc::new(MemDataManager::new(None));
-    }
+            let vnode = self.get_vnode(&vnode_id).unwrap().clone();
 
-    fn get_dm_mut(&mut self) -> &mut TempDataManager {
-        &mut self.dm
+            if let Some(inner_props) = inner::layout(&vnode.clone(), self).await {
+                let vnode = self.get_vnode(&vnode_id).unwrap();
+                if vnode.inner_node.data == 0 {
+                    self.get_vnode_mut(&vnode_id).unwrap().inner_node = Node::new(self.new_vnode());
+                }
+                inner::apply_layout(self, vnode_id, &inner_props).await?;
+            } else {
+                // update meta element
+                inner::resize_child(vnode_id, self, view_props.child_v.len());
+                for i in 0..view_props.child_v.len() {
+                    let child_props = &view_props.child_v[i];
+                    let child_view_id =
+                        self.get_vnode(&vnode_id).unwrap().inner_node.child_v[i].data;
+                    if self
+                        .get_vnode(&child_view_id)
+                        .ok_or(err::Error::Other(format!(
+                            "no vnode with id: {child_view_id}!"
+                        )))?
+                        .view_props
+                        != *child_props
+                    {
+                        self.apply_props(child_view_id, child_props).await?;
+                    }
+                }
+            }
+            Ok(())
+        })
     }
 }
