@@ -162,13 +162,12 @@ pub trait AsViewManager: AsEdgeEngine {
                 self.load(&event, &Path::from_str("$->$:input"))
                     .await
                     .unwrap();
-                for listener in vnode.view_props.props[entry_name].clone().members() {
-                    let rs = self
-                        .execute_script(&vec![format!("{}", listener.as_str().unwrap())])
-                        .await
-                        .unwrap();
-                    log::debug!("{:?}", rs);
-                }
+                let script = vnode.view_props.props[entry_name]
+                    .members()
+                    .map(|s| s.as_str().unwrap().to_string())
+                    .collect::<Vec<String>>();
+                let rs = self.execute_script(&script).await.unwrap();
+                log::debug!("{:?}", rs);
             }
             Ok(())
         })

@@ -111,7 +111,7 @@ impl AsViewManager for ViewManager {
     }
 
     fn update_vnode_class(&mut self, id: u64, class: &str) {
-        log::info!("update_vnode_class");
+        log::info!("update_vnode_class: {id}, {class}");
     }
 }
 
@@ -140,7 +140,7 @@ fn main() {
                 //
                 format!("$->$:root = ? _"),
                 //
-                format!("$->$:onclick = '$->$:output\\s+\\s1\\s1' _"),
+                format!("$->$:onclick = '$->$:output\\s+\\s1\\s1','$->$:output\\s+\\s$->$:output\\s1' _"),
                 //
                 format!("$->$:root->$:class = div _"),
                 format!("$->$:root->$:props = ? _"),
