@@ -109,7 +109,7 @@ impl<Data> Node<Data> {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct ViewProps {
     pub class: String,
     pub props: json::JsonValue,
@@ -142,7 +142,7 @@ pub trait AsViewManager: AsEdgeEngine {
 
     fn rm_vnode(&mut self, id: u64) -> Option<VNode>;
 
-    fn update_vnode_class(&mut self, id: u64, class: &str);
+    fn on_update_vnode_props(&mut self, id: u64, props: &ViewProps);
 
     fn event_entry<'a, 'a1, 'f>(
         &'a mut self,
@@ -184,12 +184,10 @@ pub trait AsViewManager: AsEdgeEngine {
         Self: Sized,
     {
         Box::pin(async move {
-            let class = self.get_vnode(&vnode_id).unwrap().view_props.class.clone();
-
-            if class != view_props.class {
-                self.update_vnode_class(vnode_id, &view_props.class);
+            if self.get_vnode(&vnode_id).unwrap().view_props != *view_props {
+                self.on_update_vnode_props(vnode_id, view_props);
+                self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
             }
-            self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
 
             let vnode = self.get_vnode(&vnode_id).unwrap().clone();
 

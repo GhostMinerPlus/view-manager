@@ -106,8 +106,8 @@ impl AsViewManager for ViewManager {
         self.inner.vnode_mp.remove(&id)
     }
 
-    fn update_vnode_class(&mut self, id: u64, class: &str) {
-        log::info!("update_vnode_class: {id}, {class}");
+    fn on_update_vnode_props(&mut self, id: u64, props: &ViewProps) {
+        log::info!("update_vnode_class: {id}, {:?}", props);
     }
 }
 
