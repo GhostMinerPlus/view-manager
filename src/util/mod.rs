@@ -20,7 +20,7 @@ mod inner {
                     acc.extend(item);
                     acc
                 })
-                .unwrap(),
+                .unwrap_or(vec![]),
         }]
     }
 }
