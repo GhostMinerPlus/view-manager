@@ -45,20 +45,16 @@ impl ViewManager {
         entry: ViewProps,
         dm: Arc<dyn AsDataManager>,
     ) -> Self {
-        let mut unique_id = 0;
-        let mut vnode_mp = HashMap::new();
-        vnode_mp.insert(unique_id, VNode::new(entry.clone()));
-        unique_id += 1;
-
         let mut this = Self {
             inner: InnerViewManager {
-                unique_id,
+                unique_id: 0,
                 view_class,
-                vnode_mp,
+                vnode_mp: HashMap::new(),
             },
             dm: TempDataManager::new(dm),
         };
 
+        this.new_vnode();
         this.apply_props(0, &entry).await.unwrap();
 
         this
