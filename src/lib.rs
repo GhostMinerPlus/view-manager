@@ -5,7 +5,7 @@ use edge_lib::util::{engine::AsEdgeEngine, Path};
 mod inner {
     use edge_lib::util::Path;
 
-    use crate::{err, AsViewManager};
+    use crate::AsViewManager;
 
     use super::{Node, VNode, ViewProps};
 
@@ -33,27 +33,6 @@ mod inner {
                 vm.rm_vnode(item.data);
             }
         }
-    }
-
-    pub async fn apply_layout(
-        vm: &mut impl AsViewManager,
-        vnode_id: u64,
-        view_props: &ViewProps,
-    ) -> err::Result<()> {
-        resize_child(vnode_id, vm, view_props.child_v.len());
-
-        for i in 0..view_props.child_v.len() {
-            let child_props = &view_props.child_v[i];
-            let child_view_id = vm.get_vnode(&vnode_id).unwrap().inner_node.child_v[i].data;
-
-            vm.apply_props(child_view_id, child_props).await?;
-        }
-
-        let inner_node = &vm.get_vnode(&vnode_id).unwrap().inner_node;
-
-        vm.apply_props(inner_node.data, view_props).await?;
-
-        Ok(())
     }
 
     ///
@@ -193,7 +172,9 @@ pub trait AsViewManager: AsEdgeEngine {
                     self.get_vnode_mut(&vnode_id).unwrap().inner_node = Node::new(self.new_vnode());
                 }
 
-                inner::apply_layout(self, vnode_id, &inner_props).await?;
+                let inner_id = self.get_vnode(&vnode_id).unwrap().inner_node.data;
+
+                self.apply_props(inner_id, &inner_props).await?;
             } else {
                 // update meta element
                 inner::resize_child(vnode_id, self, view_props.child_v.len());
