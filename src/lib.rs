@@ -45,21 +45,14 @@ mod inner {
         for i in 0..view_props.child_v.len() {
             let child_props = &view_props.child_v[i];
             let child_view_id = vm.get_vnode(&vnode_id).unwrap().inner_node.child_v[i].data;
-            if vm
-                .get_vnode(&child_view_id)
-                .ok_or(err::Error::Other(format!(
-                    "no vnode with id: {child_view_id}!"
-                )))?
-                .view_props
-                != *child_props
-            {
-                vm.apply_props(child_view_id, child_props).await?;
-            }
+
+            vm.apply_props(child_view_id, child_props).await?;
         }
+
         let inner_node = &vm.get_vnode(&vnode_id).unwrap().inner_node;
-        if vm.get_vnode(&inner_node.data).unwrap().view_props != *view_props {
-            vm.apply_props(inner_node.data, view_props).await?;
-        }
+
+        vm.apply_props(inner_node.data, view_props).await?;
+
         Ok(())
     }
 
@@ -69,6 +62,7 @@ mod inner {
             vm.load(&view.view_props.props, &Path::from_str("$->$:input"))
                 .await
                 .unwrap();
+
             let node =
                 super::util::execute_as_node(&script.clone(), &view.view_props.child_v, vm).await;
 
@@ -184,36 +178,32 @@ pub trait AsViewManager: AsEdgeEngine {
         Self: Sized,
     {
         Box::pin(async move {
-            if self.get_vnode(&vnode_id).unwrap().view_props != *view_props {
-                self.on_update_vnode_props(vnode_id, view_props);
-                self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
+            if self.get_vnode(&vnode_id).unwrap().view_props == *view_props {
+                return Ok(());
             }
 
-            let vnode = self.get_vnode(&vnode_id).unwrap().clone();
+            self.on_update_vnode_props(vnode_id, view_props);
 
-            if let Some(inner_props) = inner::layout(&vnode.clone(), self).await {
-                let vnode = self.get_vnode(&vnode_id).unwrap();
-                if vnode.inner_node.data == 0 {
+            self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
+
+            if let Some(inner_props) =
+                inner::layout(&self.get_vnode(&vnode_id).unwrap().clone(), self).await
+            {
+                if self.get_vnode(&vnode_id).unwrap().inner_node.data == 0 {
                     self.get_vnode_mut(&vnode_id).unwrap().inner_node = Node::new(self.new_vnode());
                 }
+
                 inner::apply_layout(self, vnode_id, &inner_props).await?;
             } else {
                 // update meta element
                 inner::resize_child(vnode_id, self, view_props.child_v.len());
+
                 for i in 0..view_props.child_v.len() {
                     let child_props = &view_props.child_v[i];
                     let child_view_id =
                         self.get_vnode(&vnode_id).unwrap().inner_node.child_v[i].data;
-                    if self
-                        .get_vnode(&child_view_id)
-                        .ok_or(err::Error::Other(format!(
-                            "no vnode with id: {child_view_id}!"
-                        )))?
-                        .view_props
-                        != *child_props
-                    {
-                        self.apply_props(child_view_id, child_props).await?;
-                    }
+
+                    self.apply_props(child_view_id, child_props).await?;
                 }
             }
             Ok(())

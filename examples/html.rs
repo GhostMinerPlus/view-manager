@@ -11,16 +11,16 @@ mod inner {
 
     use crate::ViewManager;
 
-    pub fn ser_html(space: &str, id: u64, vnode_mp: &ViewManager) -> String {
-        let vnode = vnode_mp.get_vnode(&id).unwrap();
+    pub fn ser_html(space: &str, id: u64, vm: &ViewManager) -> String {
+        let vnode = vm.get_vnode(&id).unwrap();
         if vnode.inner_node.data != 0 {
             // virtual container
-            ser_html(&format!("{space}{space}"), vnode.inner_node.data, vnode_mp)
+            ser_html(&format!("{space}{space}"), vnode.inner_node.data, vm)
         } else {
             // meta container
             let mut html = format!("{space}<{}>", vnode.view_props.class);
             for child_node in &vnode.inner_node.child_v {
-                let child_html = ser_html(&format!("{space}{space}"), child_node.data, vnode_mp);
+                let child_html = ser_html(&format!("{space}{space}"), child_node.data, vm);
                 html = format!("{html}\n{child_html}");
             }
             format!("{html}\n{space}</{}>", vnode.view_props.class)
@@ -54,8 +54,8 @@ impl ViewManager {
             dm: TempDataManager::new(dm),
         };
 
-        this.new_vnode();
-        this.apply_props(0, &entry).await.unwrap();
+        let root_id = this.new_vnode();
+        this.apply_props(root_id, &entry).await.unwrap();
 
         this
     }
@@ -107,7 +107,7 @@ impl AsViewManager for ViewManager {
     }
 
     fn on_update_vnode_props(&mut self, id: u64, props: &ViewProps) {
-        log::info!("update_vnode_class: {id}, {:?}", props);
+        log::info!("on_update_vnode_props: {id}, {:?}", props);
     }
 }
 
