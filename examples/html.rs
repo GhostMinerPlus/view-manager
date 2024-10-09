@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use edge_lib::util::data::{AsDataManager, AsStack, MemDataManager, TempDataManager};
 use view_manager::{AsViewManager, VNode, ViewProps};
@@ -40,7 +40,7 @@ impl ViewManager {
     async fn new(
         view_class: HashMap<String, Vec<String>>,
         entry: ViewProps,
-        dm: Arc<dyn AsDataManager>,
+        dm: Box<dyn AsDataManager>,
     ) -> Self {
         let mut this = Self {
             inner: InnerViewManager {
@@ -64,7 +64,7 @@ impl AsDataManager for ViewManager {
     }
 
     fn append<'a, 'a1, 'f>(
-        &'a self,
+        &'a mut self,
         path: &'a1 edge_lib::util::Path,
         item_v: Vec<String>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>>
@@ -76,7 +76,7 @@ impl AsDataManager for ViewManager {
     }
 
     fn set<'a, 'a1, 'f>(
-        &'a self,
+        &'a mut self,
         path: &'a1 edge_lib::util::Path,
         item_v: Vec<String>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>>
@@ -116,7 +116,7 @@ impl AsDataManager for ViewManager {
     }
 
     fn call<'a, 'a1, 'a2, 'a3, 'a4, 'f>(
-        &'a self,
+        &'a mut self,
         output: &'a1 edge_lib::util::Path,
         func: &'a2 str,
         input: &'a3 edge_lib::util::Path,
@@ -194,8 +194,6 @@ fn main() {
         )
         .init();
 
-        let global = Arc::new(MemDataManager::new(None));
-
         let mut view_class = HashMap::new();
 
         view_class.insert(
@@ -245,7 +243,7 @@ fn main() {
         let mut vm = ViewManager::new(
             view_class,
             entry,
-            global,
+            Box::new(MemDataManager::new(None)),
         )
         .await;
 

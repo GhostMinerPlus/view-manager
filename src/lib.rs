@@ -1,6 +1,10 @@
 use std::{future::Future, pin::Pin};
 
-use edge_lib::util::{data::{AsDataManager, AsStack}, engine::AsEdgeEngine, Path};
+use edge_lib::util::{
+    data::{AsDataManager, AsStack},
+    engine::AsEdgeEngine,
+    Path,
+};
 
 mod inner {
     use edge_lib::util::Path;
@@ -37,11 +41,10 @@ mod inner {
 
     ///
     pub async fn layout(view: &VNode, vm: &mut impl AsViewManager) -> Option<ViewProps> {
+        vm.load(&view.view_props.props, &Path::from_str("$->$:input"))
+            .await
+            .unwrap();
         if let Some(script) = vm.get_class(&view.view_props.class) {
-            vm.load(&view.view_props.props, &Path::from_str("$->$:input"))
-                .await
-                .unwrap();
-
             let node =
                 super::util::execute_as_node(&script.clone(), &view.view_props.child_v, vm).await;
 
@@ -130,11 +133,11 @@ pub trait AsViewManager: AsDataManager + AsStack {
     {
         Box::pin(async move {
             log::debug!("event_entry: {entry_name}");
+            self.load(&event, &Path::from_str("$->$:input"))
+                .await
+                .unwrap();
             if let Some(vnode) = self.get_vnode(&id) {
                 log::debug!("event_entry: props={}", vnode.view_props.props);
-                self.load(&event, &Path::from_str("$->$:input"))
-                    .await
-                    .unwrap();
                 let script = vnode.view_props.props[entry_name]
                     .members()
                     .map(|s| s.as_str().unwrap().to_string())
