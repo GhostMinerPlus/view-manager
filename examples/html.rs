@@ -1,9 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use edge_lib::util::{
-    data::{AsDataManager, MemDataManager, TempDataManager},
-    engine::{AsEdgeEngine, EdgeEngine},
-};
+use edge_lib::util::data::{AsDataManager, AsStack, MemDataManager, TempDataManager};
 use view_manager::{AsViewManager, VNode, ViewProps};
 
 mod inner {
@@ -61,17 +58,92 @@ impl ViewManager {
     }
 }
 
-impl AsEdgeEngine for ViewManager {
-    fn get_dm(&self) -> &TempDataManager {
-        &self.dm
+impl AsDataManager for ViewManager {
+    fn get_auth(&self) -> &edge_lib::util::data::Auth {
+        self.dm.get_auth()
     }
 
-    fn reset(&mut self) {
-        self.dm.temp = Arc::new(MemDataManager::new(None));
+    fn append<'a, 'a1, 'f>(
+        &'a self,
+        path: &'a1 edge_lib::util::Path,
+        item_v: Vec<String>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f,
+    {
+        self.dm.append(path, item_v)
     }
 
-    fn get_dm_mut(&mut self) -> &mut TempDataManager {
-        &mut self.dm
+    fn set<'a, 'a1, 'f>(
+        &'a self,
+        path: &'a1 edge_lib::util::Path,
+        item_v: Vec<String>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f,
+    {
+        self.dm.set(path, item_v)
+    }
+
+    fn get<'a, 'a1, 'f>(
+        &'a self,
+        path: &'a1 edge_lib::util::Path,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::io::Result<Vec<String>>> + Send + 'f>,
+    >
+    where
+        'a: 'f,
+        'a1: 'f,
+    {
+        self.dm.get(path)
+    }
+
+    fn get_code_v<'a, 'a1, 'a2, 'f>(
+        &'a self,
+        root: &'a1 str,
+        space: &'a2 str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::io::Result<Vec<String>>> + Send + 'f>,
+    >
+    where
+        'a: 'f,
+        'a1: 'f,
+        'a2: 'f,
+    {
+        self.dm.get_code_v(root, space)
+    }
+
+    fn call<'a, 'a1, 'a2, 'a3, 'a4, 'f>(
+        &'a self,
+        output: &'a1 edge_lib::util::Path,
+        func: &'a2 str,
+        input: &'a3 edge_lib::util::Path,
+        input1: &'a4 edge_lib::util::Path,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f,
+        'a2: 'f,
+        'a3: 'f,
+        'a4: 'f,
+    {
+        self.dm.call(output, func, input, input1)
+    }
+}
+
+impl AsStack for ViewManager {
+    fn push<'a, 'f>(
+        &'a mut self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>> {
+        self.dm.push()
+    }
+
+    fn pop<'a, 'f>(
+        &'a mut self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>> {
+        self.dm.pop()
     }
 }
 
@@ -122,7 +194,7 @@ fn main() {
         )
         .init();
 
-        let edge_engine = EdgeEngine::new(Arc::new(MemDataManager::new(None)), "root").await;
+        let global = Arc::new(MemDataManager::new(None));
 
         let mut view_class = HashMap::new();
 
@@ -173,9 +245,7 @@ fn main() {
         let mut vm = ViewManager::new(
             view_class,
             entry,
-            edge_engine
-                .get_dm()
-                .divide(edge_engine.get_dm().get_auth().clone()),
+            global,
         )
         .await;
 

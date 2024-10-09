@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use edge_lib::util::{engine::AsEdgeEngine, Path};
+use edge_lib::util::{data::{AsDataManager, AsStack}, engine::AsEdgeEngine, Path};
 
 mod inner {
     use edge_lib::util::Path;
@@ -104,7 +104,7 @@ impl VNode {
     }
 }
 
-pub trait AsViewManager: AsEdgeEngine {
+pub trait AsViewManager: AsDataManager + AsStack {
     fn get_class(&self, class: &str) -> Option<&Vec<String>>;
 
     fn get_vnode(&self, id: &u64) -> Option<&VNode>;
