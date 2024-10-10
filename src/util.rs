@@ -18,10 +18,14 @@ mod inner {
 
     ///
     pub async fn layout(
+        vnode_id: u64,
         view_props: &ViewProps,
         vm: &mut impl AsViewManager,
     ) -> Option<Node<ViewProps>> {
-        vm.load(&view_props.props, &Path::from_str("$->$:input"))
+        vm.load(&view_props.props, &Path::from_str("$->$:props"))
+            .await
+            .unwrap();
+        vm.set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
             .await
             .unwrap();
         if let Some(script) = vm.get_class(&view_props.class) {
@@ -97,7 +101,7 @@ pub trait AsViewManager: AsDataManager + AsStack {
     {
         Box::pin(async move {
             log::debug!("event_entry: {entry_name}");
-            self.load(&event, &Path::from_str("$->$:input"))
+            self.load(&event, &Path::from_str("$->$:event"))
                 .await
                 .unwrap();
             if let Some(vnode) = self.get_vnode(&id) {
@@ -107,10 +111,10 @@ pub trait AsViewManager: AsDataManager + AsStack {
                     .map(|s| s.as_str().unwrap().to_string())
                     .collect::<Vec<String>>();
                 let context = vnode.context;
-                self.set(&Path::from_str("$->$:input"), vec![context.to_string()])
+                self.set(&Path::from_str("$->$:context"), vec![context.to_string()])
                     .await
                     .unwrap();
-                self.set(&Path::from_str("$->$:input1"), vec![id.to_string()])
+                self.set(&Path::from_str("$->$:vnode_id"), vec![id.to_string()])
                     .await
                     .unwrap();
                 let rs = self.execute_script(&script).await.unwrap();
@@ -141,7 +145,7 @@ pub trait AsViewManager: AsDataManager + AsStack {
 
             self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
 
-            if let Some(inner_props_node) = inner::layout(&view_props, self).await {
+            if let Some(inner_props_node) = inner::layout(vnode_id, &view_props, self).await {
                 if self.get_vnode(&vnode_id).unwrap().inner_node.data == 0 {
                     self.get_vnode_mut(&vnode_id).unwrap().inner_node =
                         Node::new(self.new_vnode(vnode_id));
