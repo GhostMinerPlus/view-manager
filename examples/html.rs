@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use edge_lib::util::data::{AsDataManager, AsStack, MemDataManager, TempDataManager};
-use view_manager::{AsViewManager, VNode, ViewProps};
+use view_manager::util::{AsViewManager, VNode, ViewProps};
 
 mod inner {
-    use view_manager::AsViewManager;
+    use view_manager::util::AsViewManager;
 
     use crate::ViewManager;
 
@@ -16,8 +16,8 @@ mod inner {
         } else {
             // meta container
             let mut html = format!("{space}<{}>", vnode.view_props.class);
-            for child_node in &vnode.inner_node.child_v {
-                let child_html = ser_html(&format!("{space}{space}"), child_node.data, vm);
+            for child_node in &vnode.embeded_child_v {
+                let child_html = ser_html(&format!("{space}{space}"), *child_node, vm);
                 html = format!("{html}\n{child_html}");
             }
             format!("{html}\n{space}</{}>", vnode.view_props.class)
@@ -51,8 +51,8 @@ impl ViewManager {
             dm: TempDataManager::new(dm),
         };
 
-        let root_id = this.new_vnode();
-        this.apply_props(root_id, &entry).await.unwrap();
+        let root_id = this.new_vnode(0);
+        this.apply_props(root_id, &entry, 0).await.unwrap();
 
         this
     }
@@ -160,17 +160,10 @@ impl AsViewManager for ViewManager {
         self.inner.vnode_mp.get_mut(id)
     }
 
-    fn new_vnode(&mut self) -> u64 {
+    fn new_vnode(&mut self, context: u64) -> u64 {
         let new_id = self.inner.unique_id;
         self.inner.unique_id += 1;
-        self.inner.vnode_mp.insert(
-            new_id,
-            VNode::new(ViewProps {
-                class: format!(""),
-                props: json::Null,
-                child_v: vec![],
-            }),
-        );
+        self.inner.vnode_mp.insert(new_id, VNode::new(context));
         new_id
     }
 
@@ -206,7 +199,7 @@ fn main() {
                 //
                 format!("$->$:root = ? _"),
                 //
-                format!("$->$:onclick = '$->$:output\\s+\\s1\\s1','$->$:output\\s+\\s$->$:output\\s1' _"),
+                format!("$->$:onclick = '$->$:output\\s=\\s$->$:input1\\s_' _"),
                 //
                 format!("$->$:root->$:class = div _"),
                 format!("$->$:root->$:props = ? _"),
@@ -221,23 +214,6 @@ fn main() {
         let entry = ViewProps {
             class: "Main".to_string(),
             props: json::Null,
-            child_v: vec![
-                ViewProps {
-                    class: "input".to_string(),
-                    props: json::Null,
-                    child_v: vec![],
-                },
-                ViewProps {
-                    class: "input".to_string(),
-                    props: json::Null,
-                    child_v: vec![],
-                },
-                ViewProps {
-                    class: "input".to_string(),
-                    props: json::Null,
-                    child_v: vec![],
-                },
-            ],
         };
 
         let mut vm = ViewManager::new(
