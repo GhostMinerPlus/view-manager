@@ -60,6 +60,11 @@ pub async fn execute_as_node(
     edge_engine: &mut impl AsEdgeEngine,
 ) -> Node<ViewProps> {
     let rs = edge_engine.execute_script(script).await.unwrap();
-    let root_v = json::parse(&edge_lib::util::rs_2_str(&rs)).unwrap();
+
+    let s = edge_lib::util::rs_2_str(&rs);
+
+    log::debug!("execute_as_node: {s}");
+
+    let root_v = json::parse(&s).unwrap();
     inner::parse_child(&root_v[0])
 }
