@@ -24,6 +24,8 @@ mod inner {
         view_props: &ViewProps,
         vm: &mut impl AsViewManager,
     ) -> Option<Node<ViewProps>> {
+        vm.push().await.unwrap();
+
         vm.load(
             &vm.get_vnode(&vnode_id).unwrap().state.clone(),
             &Path::from_str("$->$:state"),
@@ -36,11 +38,15 @@ mod inner {
         vm.set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
             .await
             .unwrap();
-        if let Some(script) = vm.get_class(&view_props.class) {
+        let rs = if let Some(script) = vm.get_class(&view_props.class) {
             Some(super::inner_util::execute_as_node(&script.clone(), vm).await)
         } else {
             None
-        }
+        };
+
+        vm.pop().await.unwrap();
+
+        rs
     }
 
     pub async fn event_handler(
