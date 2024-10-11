@@ -20,3 +20,10 @@ impl Display for Error {
 pub fn map_io_err(err: std::io::Error) -> Error {
     Error::Other(err.to_string())
 }
+
+pub fn map_append<E>(append: &'static str) -> impl Fn(E) -> Error
+where
+    E: Display,
+{
+    move |e: E| Error::Other(format!("{e}{append}"))
+}

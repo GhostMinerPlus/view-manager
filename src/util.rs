@@ -2,7 +2,9 @@
 
 mod inner_util;
 mod inner {
-    use edge_lib::util::Path;
+    use edge_lib::util::{engine::AsEdgeEngine, Path};
+
+    use crate::err;
 
     use super::{AsViewManager, Node, ViewProps};
 
@@ -22,6 +24,12 @@ mod inner {
         view_props: &ViewProps,
         vm: &mut impl AsViewManager,
     ) -> Option<Node<ViewProps>> {
+        vm.load(
+            &vm.get_vnode(&vnode_id).unwrap().state.clone(),
+            &Path::from_str("$->$:state"),
+        )
+        .await
+        .unwrap();
         vm.load(&view_props.props, &Path::from_str("$->$:props"))
             .await
             .unwrap();
@@ -34,15 +42,41 @@ mod inner {
             None
         }
     }
+
+    pub async fn event_handler(
+        vm: &mut impl AsViewManager,
+        event: &json::JsonValue,
+        context: u64,
+        vnode_id: u64,
+        state: &json::JsonValue,
+        script: &[String],
+    ) -> err::Result<json::JsonValue> {
+        vm.load(event, &Path::from_str("$->$:event"))
+            .await
+            .map_err(err::map_append("\nat load"))?;
+        vm.load(&state, &Path::from_str("$->$:state"))
+            .await
+            .map_err(err::map_append("\nat load"))?;
+        vm.set(&Path::from_str("$->$:context"), vec![context.to_string()])
+            .await
+            .map_err(err::map_append("\nat load"))?;
+        vm.set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
+            .await
+            .map_err(err::map_append("\nat load"))?;
+
+        vm.execute_script(script)
+            .await
+            .map_err(err::map_append("\nat execute_script"))?;
+
+        vm.dump(&Path::from_str("$->$:state"), "$")
+            .await
+            .map_err(err::map_append("\nat dump"))
+    }
 }
 
 use std::{future::Future, pin::Pin};
 
-use edge_lib::util::{
-    data::{AsDataManager, AsStack},
-    engine::AsEdgeEngine,
-    Path,
-};
+use edge_lib::util::data::{AsDataManager, AsStack};
 use inner_util::Node;
 
 use crate::err;
@@ -56,6 +90,7 @@ pub struct ViewProps {
 #[derive(Clone)]
 pub struct VNode {
     pub view_props: ViewProps,
+    pub state: json::JsonValue,
     pub embeded_child_v: Vec<u64>,
     pub inner_node: Node<u64>,
     pub context: u64,
@@ -68,6 +103,7 @@ impl VNode {
                 class: String::new(),
                 props: json::Null,
             },
+            state: json::object! {},
             embeded_child_v: vec![],
             inner_node: Node::new(0),
             context,
@@ -90,7 +126,7 @@ pub trait AsViewManager: AsDataManager + AsStack {
 
     fn event_entry<'a, 'a1, 'f>(
         &'a mut self,
-        id: u64,
+        vnode_id: u64,
         entry_name: &'a1 str,
         event: json::JsonValue,
     ) -> Pin<Box<dyn Future<Output = err::Result<()>> + Send + 'f>>
@@ -101,24 +137,37 @@ pub trait AsViewManager: AsDataManager + AsStack {
     {
         Box::pin(async move {
             log::debug!("event_entry: {entry_name}");
-            self.load(&event, &Path::from_str("$->$:event"))
-                .await
-                .unwrap();
-            if let Some(vnode) = self.get_vnode(&id) {
+            if let Some(vnode) = self.get_vnode(&vnode_id) {
                 log::debug!("event_entry: props={}", vnode.view_props.props);
                 let script = vnode.view_props.props[entry_name]
                     .members()
                     .map(|s| s.as_str().unwrap().to_string())
                     .collect::<Vec<String>>();
+
                 let context = vnode.context;
-                self.set(&Path::from_str("$->$:context"), vec![context.to_string()])
+
+                let state = self.get_vnode(&context).unwrap().state.clone();
+                self.push().await.map_err(err::map_append("\nat push"))?;
+
+                let rs =
+                    inner::event_handler(self, &event, context, vnode_id, &state, &script).await;
+
+                self.pop().await.map_err(err::map_append("\nat pop"))?;
+
+                let n_state = rs?;
+                log::debug!("new state: {n_state} in {context}");
+
+                if n_state != state {
+                    self.get_vnode_mut(&context).unwrap().state = n_state;
+                    self.apply_props(
+                        context,
+                        &self.get_vnode(&context).unwrap().view_props.clone(),
+                        self.get_vnode(&context).unwrap().context,
+                        true,
+                    )
                     .await
                     .unwrap();
-                self.set(&Path::from_str("$->$:vnode_id"), vec![id.to_string()])
-                    .await
-                    .unwrap();
-                let rs = self.execute_script(&script).await.unwrap();
-                log::debug!("{:?}", rs);
+                }
             }
             Ok(())
         })
@@ -129,14 +178,15 @@ pub trait AsViewManager: AsDataManager + AsStack {
         vnode_id: u64,
         view_props: &'a1 ViewProps,
         embeded_id: u64,
-    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + 'f>>
+        force: bool,
+    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + Send + 'f>>
     where
         'a: 'f,
         'a1: 'f,
         Self: Sized,
     {
         Box::pin(async move {
-            if self.get_vnode(&vnode_id).unwrap().view_props == *view_props {
+            if !force && self.get_vnode(&vnode_id).unwrap().view_props == *view_props {
                 return Ok(());
             }
 
@@ -173,14 +223,14 @@ pub trait AsViewManager: AsDataManager + AsStack {
 
                         let child_id = self.get_vnode(&inner_id).unwrap().embeded_child_v[i];
 
-                        self.apply_props(child_id, &child_props.data, embeded_id)
+                        self.apply_props(child_id, &child_props.data, embeded_id, false)
                             .await?;
                     }
 
                     inner::trunc_embeded(inner_id, self, inner_props_node.child_v.len());
                 }
 
-                self.apply_props(inner_id, &inner_props_node.data, inner_id)
+                self.apply_props(inner_id, &inner_props_node.data, inner_id, false)
                     .await?;
             } else if self.get_vnode(&vnode_id).unwrap().inner_node.data != 0 {
                 let inner_id = self.get_vnode(&vnode_id).unwrap().inner_node.data;

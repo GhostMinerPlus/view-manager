@@ -52,7 +52,7 @@ impl ViewManager {
         };
 
         let root_id = this.new_vnode(0);
-        this.apply_props(root_id, &entry, 0).await.unwrap();
+        this.apply_props(root_id, &entry, 0, true).await.unwrap();
 
         this
     }
@@ -194,12 +194,12 @@ fn main() {
             vec![
                 format!("$->$:div = ? _"),
                 //
-                format!("$->$:div->$:class = div _"),
+                format!("$->$:div->$:class if $->$:state->$:name div"),
                 format!("$->$:div->$:child = $child _"),
                 //
                 format!("$->$:root = ? _"),
                 //
-                format!("$->$:onclick = '$->$:output\\s=\\s$->$:input1\\s_' _"),
+                format!("$->$:onclick = '$->$:state->$:name\\s=\\stest\\s_' _"),
                 //
                 format!("$->$:root->$:class = div _"),
                 format!("$->$:root->$:props = ? _"),
@@ -216,12 +216,9 @@ fn main() {
             props: json::Null,
         };
 
-        let mut vm = ViewManager::new(
-            view_class,
-            entry,
-            Box::new(MemDataManager::new(None)),
-        )
-        .await;
+        let mut vm = ViewManager::new(view_class, entry, Box::new(MemDataManager::new(None))).await;
+
+        println!("{}", inner::ser_html("  ", 0, &vm));
 
         vm.event_entry(1, "$:onclick", json::JsonValue::Null)
             .await
