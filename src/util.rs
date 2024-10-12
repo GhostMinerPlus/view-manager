@@ -38,8 +38,8 @@ mod inner {
         vm.set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
             .await
             .unwrap();
-        let rs = if let Some(script) = vm.get_class(&view_props.class) {
-            Some(super::inner_util::execute_as_node(&script.clone(), vm).await)
+        let rs = if let Some(script) = vm.get_class(&view_props.class).await {
+            Some(super::inner_util::execute_as_node(&script, vm).await)
         } else {
             None
         };
@@ -118,7 +118,13 @@ impl VNode {
 }
 
 pub trait AsViewManager: AsDataManager + AsStack {
-    fn get_class(&self, class: &str) -> Option<&Vec<String>>;
+    fn get_class<'a, 'a1, 'f>(
+        &'a self,
+        class: &'a1 str,
+    ) -> Pin<Box<dyn Future<Output = Option<Vec<String>>> + Send + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f;
 
     fn get_vnode(&self, id: &u64) -> Option<&VNode>;
 

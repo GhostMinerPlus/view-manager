@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, future::Future, pin::Pin};
 
-use edge_lib::util::data::{AsDataManager, AsStack, MemDataManager, TempDataManager};
+use edge_lib::util::{
+    data::{AsDataManager, AsStack, MemDataManager, TempDataManager},
+    Path,
+};
 use view_manager::util::{AsViewManager, VNode, ViewProps};
 
 mod inner {
@@ -28,7 +31,6 @@ mod inner {
 struct InnerViewManager {
     unique_id: u64,
     vnode_mp: HashMap<u64, VNode>,
-    view_class: HashMap<String, Vec<String>>,
 }
 
 struct ViewManager {
@@ -37,15 +39,10 @@ struct ViewManager {
 }
 
 impl ViewManager {
-    async fn new(
-        view_class: HashMap<String, Vec<String>>,
-        entry: ViewProps,
-        dm: Box<dyn AsDataManager>,
-    ) -> Self {
+    async fn new(entry: ViewProps, dm: Box<dyn AsDataManager>) -> Self {
         let mut this = Self {
             inner: InnerViewManager {
                 unique_id: 0,
-                view_class,
                 vnode_mp: HashMap::new(),
             },
             dm: TempDataManager::new(dm),
@@ -148,8 +145,25 @@ impl AsStack for ViewManager {
 }
 
 impl AsViewManager for ViewManager {
-    fn get_class(&self, class: &str) -> Option<&Vec<String>> {
-        self.inner.view_class.get(class)
+    fn get_class<'a, 'a1, 'f>(
+        &'a self,
+        class: &'a1 str,
+    ) -> Pin<Box<dyn Future<Output = Option<Vec<String>>> + Send + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f,
+    {
+        Box::pin(async move {
+            let rs = self
+                .get(&Path::from_str(&format!("$->{class}")))
+                .await
+                .unwrap();
+            if rs.is_empty() {
+                None
+            } else {
+                Some(rs)
+            }
+        })
     }
 
     fn get_vnode(&self, id: &u64) -> Option<&VNode> {
@@ -187,10 +201,14 @@ fn main() {
         )
         .init();
 
-        let mut view_class = HashMap::new();
+        let entry = ViewProps {
+            class: "Main".to_string(),
+            props: json::Null,
+        };
+        let mut dm = Box::new(MemDataManager::new(None));
 
-        view_class.insert(
-            "Main".to_string(),
+        dm.set(
+            &Path::from_str("$->Main"),
             vec![
                 format!("$->$:div = ? _"),
                 //
@@ -209,14 +227,11 @@ fn main() {
                 //
                 format!("$->$:output dump $->$:root $"),
             ],
-        );
+        )
+        .await
+        .unwrap();
 
-        let entry = ViewProps {
-            class: "Main".to_string(),
-            props: json::Null,
-        };
-
-        let mut vm = ViewManager::new(view_class, entry, Box::new(MemDataManager::new(None))).await;
+        let mut vm = ViewManager::new(entry, dm).await;
 
         println!("{}", inner::ser_html("  ", 0, &vm));
 
