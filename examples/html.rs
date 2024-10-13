@@ -1,7 +1,7 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use edge_lib::util::{
-    data::{AsDataManager, AsStack, MemDataManager, TempDataManager},
+    data::{AsDataManager, MemDataManager},
     Path,
 };
 use view_manager::util::{AsViewManager, VNode, ViewProps};
@@ -35,7 +35,7 @@ struct InnerViewManager {
 
 struct ViewManager {
     inner: InnerViewManager,
-    dm: TempDataManager,
+    dm: Box<dyn AsDataManager>,
 }
 
 impl ViewManager {
@@ -45,7 +45,7 @@ impl ViewManager {
                 unique_id: 0,
                 vnode_mp: HashMap::new(),
             },
-            dm: TempDataManager::new(dm),
+            dm,
         };
 
         let root_id = this.new_vnode(0);
@@ -127,20 +127,6 @@ impl AsDataManager for ViewManager {
         'a4: 'f,
     {
         self.dm.call(output, func, input, input1)
-    }
-}
-
-impl AsStack for ViewManager {
-    fn push<'a, 'f>(
-        &'a mut self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>> {
-        self.dm.push()
-    }
-
-    fn pop<'a, 'f>(
-        &'a mut self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>> {
-        self.dm.pop()
     }
 }
 

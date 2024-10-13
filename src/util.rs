@@ -2,7 +2,11 @@
 
 mod inner_util;
 mod inner {
-    use edge_lib::util::{engine::AsEdgeEngine, Path};
+    use edge_lib::util::{
+        data::AsDataManager,
+        engine::{AsEdgeEngine, EdgeEngine},
+        Path,
+    };
 
     use crate::err;
 
@@ -24,27 +28,27 @@ mod inner {
         view_props: &ViewProps,
         vm: &mut impl AsViewManager,
     ) -> Option<Node<ViewProps>> {
-        vm.push().await.unwrap();
-
-        vm.load(
-            &vm.get_vnode(&vnode_id).unwrap().state.clone(),
-            &Path::from_str("$->$:state"),
-        )
-        .await
-        .unwrap();
-        vm.load(&view_props.props, &Path::from_str("$->$:props"))
-            .await
-            .unwrap();
-        vm.set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
-            .await
-            .unwrap();
         let rs = if let Some(script) = vm.get_class(&view_props.class).await {
-            Some(super::inner_util::execute_as_node(&script, vm).await)
+            let state = vm.get_vnode(&vnode_id).unwrap().state.clone();
+
+            let mut engine = EdgeEngine::new(vm);
+
+            engine
+                .load(&state, &Path::from_str("$->$:state"))
+                .await
+                .unwrap();
+            engine
+                .load(&view_props.props, &Path::from_str("$->$:props"))
+                .await
+                .unwrap();
+            engine
+                .set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
+                .await
+                .unwrap();
+            Some(super::inner_util::execute_as_node(&script, &mut engine).await)
         } else {
             None
         };
-
-        vm.pop().await.unwrap();
 
         rs
     }
@@ -57,24 +61,32 @@ mod inner {
         state: &json::JsonValue,
         script: &[String],
     ) -> err::Result<json::JsonValue> {
-        vm.load(event, &Path::from_str("$->$:event"))
+        let mut engine = EdgeEngine::new(vm);
+
+        engine
+            .load(event, &Path::from_str("$->$:event"))
             .await
             .map_err(err::map_append("\nat load"))?;
-        vm.load(&state, &Path::from_str("$->$:state"))
+        engine
+            .load(&state, &Path::from_str("$->$:state"))
             .await
             .map_err(err::map_append("\nat load"))?;
-        vm.set(&Path::from_str("$->$:context"), vec![context.to_string()])
+        engine
+            .set(&Path::from_str("$->$:context"), vec![context.to_string()])
             .await
             .map_err(err::map_append("\nat load"))?;
-        vm.set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
+        engine
+            .set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
             .await
             .map_err(err::map_append("\nat load"))?;
 
-        vm.execute_script(script)
+        engine
+            .execute_script(script)
             .await
             .map_err(err::map_append("\nat execute_script"))?;
 
-        vm.dump(&Path::from_str("$->$:state"), "$")
+        engine
+            .dump(&Path::from_str("$->$:state"), "$")
             .await
             .map_err(err::map_append("\nat dump"))
     }
@@ -82,7 +94,7 @@ mod inner {
 
 use std::{future::Future, pin::Pin};
 
-use edge_lib::util::data::{AsDataManager, AsStack};
+use edge_lib::util::data::AsDataManager;
 use inner_util::Node;
 
 use crate::err;
@@ -117,7 +129,7 @@ impl VNode {
     }
 }
 
-pub trait AsViewManager: AsDataManager + AsStack {
+pub trait AsViewManager: AsDataManager {
     fn get_class<'a, 'a1, 'f>(
         &'a self,
         class: &'a1 str,
@@ -159,12 +171,9 @@ pub trait AsViewManager: AsDataManager + AsStack {
                 let context = vnode.context;
 
                 let state = self.get_vnode(&context).unwrap().state.clone();
-                self.push().await.map_err(err::map_append("\nat push"))?;
 
                 let rs =
                     inner::event_handler(self, &event, context, vnode_id, &state, &script).await;
-
-                self.pop().await.map_err(err::map_append("\nat pop"))?;
 
                 let n_state = rs?;
                 log::debug!("new state: {n_state} in {context}");
