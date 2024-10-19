@@ -66,29 +66,29 @@ mod inner {
         engine
             .load(event, &Path::from_str("$->$:event"))
             .await
-            .map_err(err::map_append("\nat load"))?;
+            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
         engine
             .load(&state, &Path::from_str("$->$:state"))
             .await
-            .map_err(err::map_append("\nat load"))?;
+            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
         engine
             .set(&Path::from_str("$->$:context"), vec![context.to_string()])
             .await
-            .map_err(err::map_append("\nat load"))?;
+            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
         engine
             .set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
             .await
-            .map_err(err::map_append("\nat load"))?;
+            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
 
         engine
             .execute_script(script)
             .await
-            .map_err(err::map_append("\nat execute_script"))?;
+            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
 
         engine
             .dump(&Path::from_str("$->$:state"), "$")
             .await
-            .map_err(err::map_append("\nat dump"))
+            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))
     }
 }
 

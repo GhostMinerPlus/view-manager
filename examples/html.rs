@@ -64,7 +64,7 @@ impl AsDataManager for ViewManager {
         &'a mut self,
         path: &'a1 edge_lib::util::Path,
         item_v: Vec<String>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>>
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = edge_lib::err::Result<()>> + Send + 'f>>
     where
         'a: 'f,
         'a1: 'f,
@@ -76,7 +76,7 @@ impl AsDataManager for ViewManager {
         &'a mut self,
         path: &'a1 edge_lib::util::Path,
         item_v: Vec<String>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>>
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = edge_lib::err::Result<()>> + Send + 'f>>
     where
         'a: 'f,
         'a1: 'f,
@@ -88,7 +88,7 @@ impl AsDataManager for ViewManager {
         &'a self,
         path: &'a1 edge_lib::util::Path,
     ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = std::io::Result<Vec<String>>> + Send + 'f>,
+        Box<dyn std::future::Future<Output = edge_lib::err::Result<Vec<String>>> + Send + 'f>,
     >
     where
         'a: 'f,
@@ -102,7 +102,7 @@ impl AsDataManager for ViewManager {
         root: &'a1 str,
         space: &'a2 str,
     ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = std::io::Result<Vec<String>>> + Send + 'f>,
+        Box<dyn std::future::Future<Output = edge_lib::err::Result<Vec<String>>> + Send + 'f>,
     >
     where
         'a: 'f,
@@ -118,7 +118,7 @@ impl AsDataManager for ViewManager {
         func: &'a2 str,
         input: &'a3 edge_lib::util::Path,
         input1: &'a4 edge_lib::util::Path,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'f>>
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = edge_lib::err::Result<()>> + Send + 'f>>
     where
         'a: 'f,
         'a1: 'f,

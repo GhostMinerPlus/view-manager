@@ -1,29 +1,45 @@
-use std::fmt::Display;
+use std::fmt::Debug;
 
 #[derive(Debug)]
-pub enum Error {
-    Other(String),
-    Question(String),
+pub struct Error<K>
+where
+    K: Debug,
+{
+    kind: K,
+    message: String,
+    stack_v: Vec<String>,
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Other(msg) => write!(f, "{msg}"),
-            Error::Question(msg) => write!(f, "{msg}"),
+impl<K> Error<K>
+where
+    K: Debug,
+{
+    pub fn new(kind: K, message: String) -> Self {
+        Self {
+            kind,
+            message,
+            stack_v: vec![],
         }
+    }
+
+    pub fn append_stack(mut self, stack: String) -> Self {
+        self.stack_v.push(stack);
+        self
+    }
+
+    pub fn kind(&self) -> &K {
+        &self.kind
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
     }
 }
 
-pub fn map_io_err(err: std::io::Error) -> Error {
-    Error::Other(err.to_string())
+#[derive(Debug)]
+pub enum ErrorKind {
+    Other,
+    NotFound,
 }
 
-pub fn map_append<E>(append: &'static str) -> impl Fn(E) -> Error
-where
-    E: Display,
-{
-    move |e: E| Error::Other(format!("{e}{append}"))
-}
+pub type Result<T> = std::result::Result<T, Error<ErrorKind>>;
