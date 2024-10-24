@@ -8,8 +8,6 @@ mod inner {
         Path,
     };
 
-    use crate::err;
-
     use super::{AsViewManager, Node, ViewProps};
 
     pub fn trunc_embeded(vnode_id: u64, vm: &mut impl AsViewManager, n_sz: usize) {
@@ -60,35 +58,21 @@ mod inner {
         vnode_id: u64,
         state: &json::JsonValue,
         script: &[String],
-    ) -> err::Result<json::JsonValue> {
+    ) -> Result<json::JsonValue, moon_err::Error<edge_lib::err::ErrorKind>> {
         let mut engine = EdgeEngine::new(vm);
 
-        engine
-            .load(event, &Path::from_str("$->$:event"))
-            .await
-            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
-        engine
-            .load(&state, &Path::from_str("$->$:state"))
-            .await
-            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
+        engine.load(event, &Path::from_str("$->$:event")).await?;
+        engine.load(&state, &Path::from_str("$->$:state")).await?;
         engine
             .set(&Path::from_str("$->$:context"), vec![context.to_string()])
-            .await
-            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
+            .await?;
         engine
             .set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
-            .await
-            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
+            .await?;
 
-        engine
-            .execute_script(script)
-            .await
-            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))?;
+        engine.execute_script(script).await?;
 
-        engine
-            .dump(&Path::from_str("$->$:state"), "$")
-            .await
-            .map_err(|e| err::Error::new(err::ErrorKind::Other, e.message().to_string()))
+        engine.dump(&Path::from_str("$->$:state"), "$").await
     }
 }
 
@@ -175,7 +159,8 @@ pub trait AsViewManager: AsDataManager {
                 let rs =
                     inner::event_handler(self, &event, context, vnode_id, &state, &script).await;
 
-                let n_state = rs?;
+                let n_state = rs.map_err(err::map_edge_lib_err(format!("at inner::event_handler")))?;
+
                 log::debug!("new state: {n_state} in {context}");
 
                 if n_state != state {

@@ -1,45 +1,20 @@
 use std::fmt::Debug;
 
-#[derive(Debug)]
-pub struct Error<K>
-where
-    K: Debug,
-{
-    kind: K,
-    message: String,
-    stack_v: Vec<String>,
-}
-
-impl<K> Error<K>
-where
-    K: Debug,
-{
-    pub fn new(kind: K, message: String) -> Self {
-        Self {
-            kind,
-            message,
-            stack_v: vec![],
-        }
-    }
-
-    pub fn append_stack(mut self, stack: String) -> Self {
-        self.stack_v.push(stack);
-        self
-    }
-
-    pub fn kind(&self) -> &K {
-        &self.kind
-    }
-
-    pub fn message(&self) -> &str {
-        &self.message
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ErrorKind {
-    Other,
+    Other(String),
     NotFound,
+    RuntimeError,
 }
 
-pub type Result<T> = std::result::Result<T, Error<ErrorKind>>;
+pub type Result<T> = std::result::Result<T, moon_err::Error<ErrorKind>>;
+
+pub fn map_edge_lib_err(
+    stack: String,
+) -> impl FnOnce(moon_err::Error<edge_lib::err::ErrorKind>) -> moon_err::Error<ErrorKind> {
+    move |e| {
+        log::error!("{e:?}\n{stack}");
+
+        moon_err::Error::new(ErrorKind::RuntimeError, format!("{}", e.first().1), stack)
+    }
+}

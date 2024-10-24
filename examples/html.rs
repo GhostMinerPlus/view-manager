@@ -1,7 +1,7 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use edge_lib::util::{
-    data::{AsDataManager, MemDataManager},
+    data::{AsDataManager, Fu, MemDataManager},
     Path,
 };
 use view_manager::util::{AsViewManager, VNode, ViewProps};
@@ -64,7 +64,7 @@ impl AsDataManager for ViewManager {
         &'a mut self,
         path: &'a1 edge_lib::util::Path,
         item_v: Vec<String>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = edge_lib::err::Result<()>> + Send + 'f>>
+    ) -> std::pin::Pin<Box<dyn Fu<Output = edge_lib::err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
@@ -76,7 +76,7 @@ impl AsDataManager for ViewManager {
         &'a mut self,
         path: &'a1 edge_lib::util::Path,
         item_v: Vec<String>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = edge_lib::err::Result<()>> + Send + 'f>>
+    ) -> std::pin::Pin<Box<dyn Fu<Output = edge_lib::err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
@@ -88,7 +88,7 @@ impl AsDataManager for ViewManager {
         &'a self,
         path: &'a1 edge_lib::util::Path,
     ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = edge_lib::err::Result<Vec<String>>> + Send + 'f>,
+        Box<dyn Fu<Output = edge_lib::err::Result<Vec<String>>> + 'f>,
     >
     where
         'a: 'f,
@@ -102,7 +102,7 @@ impl AsDataManager for ViewManager {
         root: &'a1 str,
         space: &'a2 str,
     ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = edge_lib::err::Result<Vec<String>>> + Send + 'f>,
+        Box<dyn Fu<Output = edge_lib::err::Result<Vec<String>>> + 'f>,
     >
     where
         'a: 'f,
@@ -118,7 +118,7 @@ impl AsDataManager for ViewManager {
         func: &'a2 str,
         input: &'a3 edge_lib::util::Path,
         input1: &'a4 edge_lib::util::Path,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = edge_lib::err::Result<()>> + Send + 'f>>
+    ) -> std::pin::Pin<Box<dyn Fu<Output = edge_lib::err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,

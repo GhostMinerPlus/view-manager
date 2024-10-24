@@ -8,6 +8,7 @@ json = "0.12"
 log = "0.4"
 
 edge_lib = { git = "https://github.com/GhostMinerPlus/edge_lib.git" }
+moon_err = { git = "https://github.com/GhostMinerPlus/moon_err.git" }
 
 [dev-dependencies]
 env_logger = "0.11"
