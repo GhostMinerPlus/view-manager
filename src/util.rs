@@ -7,6 +7,9 @@ mod inner {
         engine::{AsEdgeEngine, EdgeEngine},
         Path,
     };
+    use error_stack::ResultExt;
+
+    use crate::err;
 
     use super::{AsViewManager, Node, ViewProps};
 
@@ -58,21 +61,35 @@ mod inner {
         vnode_id: u64,
         state: &json::JsonValue,
         script: &[String],
-    ) -> Result<json::JsonValue, moon_err::Error<edge_lib::err::ErrorKind>> {
+    ) -> err::Result<json::JsonValue> {
         let mut engine = EdgeEngine::new(vm);
 
-        engine.load(event, &Path::from_str("$->$:event")).await?;
-        engine.load(&state, &Path::from_str("$->$:state")).await?;
+        engine
+            .load(event, &Path::from_str("$->$:event"))
+            .await
+            .change_context(err::Error::RuntimeError)?;
+        engine
+            .load(&state, &Path::from_str("$->$:state"))
+            .await
+            .change_context(err::Error::RuntimeError)?;
         engine
             .set(&Path::from_str("$->$:context"), vec![context.to_string()])
-            .await?;
+            .await
+            .change_context(err::Error::RuntimeError)?;
         engine
             .set(&Path::from_str("$->$:vnode_id"), vec![vnode_id.to_string()])
-            .await?;
+            .await
+            .change_context(err::Error::RuntimeError)?;
 
-        engine.execute_script(script).await?;
+        engine
+            .execute_script(script)
+            .await
+            .change_context(err::Error::RuntimeError)?;
 
-        engine.dump(&Path::from_str("$->$:state"), "$").await
+        engine
+            .dump(&Path::from_str("$->$:state"), "$")
+            .await
+            .change_context(err::Error::RuntimeError)
     }
 }
 
@@ -159,7 +176,7 @@ pub trait AsViewManager: AsDataManager {
                 let rs =
                     inner::event_handler(self, &event, context, vnode_id, &state, &script).await;
 
-                let n_state = rs.map_err(err::map_edge_lib_err(format!("at inner::event_handler")))?;
+                let n_state = rs?;
 
                 log::debug!("new state: {n_state} in {context}");
 

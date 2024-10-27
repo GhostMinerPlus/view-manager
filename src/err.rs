@@ -1,20 +1,20 @@
-use std::fmt::Debug;
+use std::fmt::Display;
 
-#[derive(Debug, Clone)]
-pub enum ErrorKind {
-    Other(String),
+use error_stack::Context;
+
+#[derive(Debug)]
+pub enum Error {
+    Other,
     NotFound,
     RuntimeError,
 }
 
-pub type Result<T> = std::result::Result<T, moon_err::Error<ErrorKind>>;
-
-pub fn map_edge_lib_err(
-    stack: String,
-) -> impl FnOnce(moon_err::Error<edge_lib::err::ErrorKind>) -> moon_err::Error<ErrorKind> {
-    move |e| {
-        log::error!("{e:?}\n{stack}");
-
-        moon_err::Error::new(ErrorKind::RuntimeError, format!("{}", e.first().1), stack)
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
+
+impl Context for Error {}
+
+pub type Result<T> = error_stack::Result<T, Error>;
