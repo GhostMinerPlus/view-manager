@@ -1,13 +1,13 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
-use edge_lib::util::{
-    data::{AsDataManager, Fu, MemDataManager},
-    Path,
+use moon_class::{
+    util::{inc_v_from_str, rs_2_str},
+    AsClassManager, ClassManager,
 };
-use view_manager::util::{AsViewManager, VNode, ViewProps};
+use view_manager::{AsViewManager, VNode, ViewProps};
 
 mod inner {
-    use view_manager::util::AsViewManager;
+    use view_manager::AsViewManager;
 
     use crate::ViewManager;
 
@@ -35,17 +35,17 @@ struct InnerViewManager {
 
 struct ViewManager {
     inner: InnerViewManager,
-    dm: Box<dyn AsDataManager>,
+    cm: Box<dyn AsClassManager>,
 }
 
 impl ViewManager {
-    async fn new(entry: ViewProps, dm: Box<dyn AsDataManager>) -> Self {
+    async fn new(entry: ViewProps, dm: Box<dyn AsClassManager>) -> Self {
         let mut this = Self {
             inner: InnerViewManager {
                 unique_id: 0,
                 vnode_mp: HashMap::new(),
             },
-            dm,
+            cm: dm,
         };
 
         let root_id = this.new_vnode(0);
@@ -55,99 +55,63 @@ impl ViewManager {
     }
 }
 
-impl AsDataManager for ViewManager {
-    fn get_auth(&self) -> &edge_lib::util::data::Auth {
-        self.dm.get_auth()
-    }
-
-    fn append<'a, 'a1, 'f>(
+impl AsClassManager for ViewManager {
+    fn clear<'a, 'a1, 'a2, 'f>(
         &'a mut self,
-        path: &'a1 edge_lib::util::Path,
-        item_v: Vec<String>,
-    ) -> std::pin::Pin<Box<dyn Fu<Output = edge_lib::err::Result<()>> + 'f>>
-    where
-        'a: 'f,
-        'a1: 'f,
-    {
-        self.dm.append(path, item_v)
-    }
-
-    fn set<'a, 'a1, 'f>(
-        &'a mut self,
-        path: &'a1 edge_lib::util::Path,
-        item_v: Vec<String>,
-    ) -> std::pin::Pin<Box<dyn Fu<Output = edge_lib::err::Result<()>> + 'f>>
-    where
-        'a: 'f,
-        'a1: 'f,
-    {
-        self.dm.set(path, item_v)
-    }
-
-    fn get<'a, 'a1, 'f>(
-        &'a self,
-        path: &'a1 edge_lib::util::Path,
-    ) -> std::pin::Pin<
-        Box<dyn Fu<Output = edge_lib::err::Result<Vec<String>>> + 'f>,
-    >
-    where
-        'a: 'f,
-        'a1: 'f,
-    {
-        self.dm.get(path)
-    }
-
-    fn get_code_v<'a, 'a1, 'a2, 'f>(
-        &'a self,
-        root: &'a1 str,
-        space: &'a2 str,
-    ) -> std::pin::Pin<
-        Box<dyn Fu<Output = edge_lib::err::Result<Vec<String>>> + 'f>,
-    >
+        class: &'a1 str,
+        pair: &'a2 str,
+    ) -> Pin<Box<dyn moon_class::Fu<Output = moon_class::err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
         'a2: 'f,
     {
-        self.dm.get_code_v(root, space)
+        self.cm.clear(class, pair)
     }
 
-    fn call<'a, 'a1, 'a2, 'a3, 'a4, 'f>(
-        &'a mut self,
-        output: &'a1 edge_lib::util::Path,
-        func: &'a2 str,
-        input: &'a3 edge_lib::util::Path,
-        input1: &'a4 edge_lib::util::Path,
-    ) -> std::pin::Pin<Box<dyn Fu<Output = edge_lib::err::Result<()>> + 'f>>
+    fn get<'a, 'a1, 'a2, 'f>(
+        &'a self,
+        class: &'a1 str,
+        pair: &'a2 str,
+    ) -> Pin<Box<dyn moon_class::Fu<Output = moon_class::err::Result<Vec<String>>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
         'a2: 'f,
-        'a3: 'f,
-        'a4: 'f,
     {
-        self.dm.call(output, func, input, input1)
+        self.cm.get(class, pair)
+    }
+
+    fn append<'a, 'a1, 'a2, 'f>(
+        &'a mut self,
+        class: &'a1 str,
+        pair: &'a2 str,
+        item_v: Vec<String>,
+    ) -> Pin<Box<dyn moon_class::Fu<Output = moon_class::err::Result<()>> + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f,
+        'a2: 'f,
+    {
+        self.cm.append(class, pair, item_v)
     }
 }
 
 impl AsViewManager for ViewManager {
-    fn get_class<'a, 'a1, 'f>(
+    fn get_class_view<'a, 'a1, 'f>(
         &'a self,
         class: &'a1 str,
-    ) -> Pin<Box<dyn Future<Output = Option<Vec<String>>> + Send + 'f>>
+    ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'f>>
     where
         'a: 'f,
         'a1: 'f,
     {
         Box::pin(async move {
-            let rs = self
-                .get(&Path::from_str(&format!("$->{class}")))
-                .await
-                .unwrap();
+            let rs = self.get("view", class).await.unwrap();
             if rs.is_empty() {
                 None
             } else {
-                Some(rs)
+                Some(rs_2_str(&rs))
             }
         })
     }
@@ -191,37 +155,17 @@ fn main() {
             class: "Main".to_string(),
             props: json::Null,
         };
-        let mut dm = Box::new(MemDataManager::new(None));
+        let mut cm = Box::new(ClassManager::new());
 
-        dm.set(
-            &Path::from_str("$->Main"),
-            vec![
-                format!("$->$:div = ? _"),
-                //
-                format!("$->$:div->$:class if $->$:state->$:name div"),
-                format!("$->$:div->$:child = $child _"),
-                //
-                format!("$->$:root = ? _"),
-                //
-                format!("$->$:onclick = '$->$:state->$:name\\s=\\stest\\s_' _"),
-                //
-                format!("$->$:root->$:class = div _"),
-                format!("$->$:root->$:props = ? _"),
-                format!("$->$:root->$:child = $->$:div _"),
-                //
-                format!("$->$:root->$:props->$:onclick = $->$:onclick _"),
-                //
-                format!("$->$:output dump $->$:root $"),
-            ],
-        )
-        .await
-        .unwrap();
+        cm.execute(&inc_v_from_str("view[Main] = '$result[] = \\'[{\"$class\": [\"test\"]}]\\';';").unwrap())
+            .await
+            .unwrap();
 
-        let mut vm = ViewManager::new(entry, dm).await;
+        let mut vm = ViewManager::new(entry, cm).await;
 
         println!("{}", inner::ser_html("  ", 0, &vm));
 
-        vm.event_entry(1, "$:onclick", json::JsonValue::Null)
+        vm.event_entry(1, "$onclick", json::JsonValue::Null)
             .await
             .unwrap();
 

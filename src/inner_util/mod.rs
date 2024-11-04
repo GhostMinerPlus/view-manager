@@ -1,9 +1,9 @@
-use edge_lib::util::engine::AsEdgeEngine;
+use moon_class::{util::Inc, AsClassManager};
 
 use super::ViewProps;
 
 mod inner {
-    use crate::util::ViewProps;
+    use crate::ViewProps;
 
     use super::Node;
 
@@ -16,10 +16,10 @@ mod inner {
         }
         Node::new_with_child_v(
             ViewProps {
-                class: root["$:class"][0].as_str().unwrap().to_string(),
-                props: root["$:props"][0].clone(),
+                class: root["$class"][0].as_str().unwrap().to_string(),
+                props: root["$props"][0].clone(),
             },
-            root["$:child"]
+            root["$child"]
                 .members()
                 .into_iter()
                 .map(|child| parse_child(child))
@@ -56,12 +56,12 @@ impl<Data> Node<Data> {
 }
 
 pub async fn execute_as_node(
-    script: &Vec<String>,
-    edge_engine: &mut impl AsEdgeEngine,
+    inc_v: &[Inc],
+    cm: &mut impl AsClassManager,
 ) -> Node<ViewProps> {
-    let rs = edge_engine.execute_script(script).await.unwrap();
+    let rs = cm.execute(inc_v).await.unwrap();
 
-    let s = edge_lib::util::rs_2_str(&rs);
+    let s = moon_class::util::rs_2_str(&rs);
 
     log::debug!("execute_as_node: {s}");
 
