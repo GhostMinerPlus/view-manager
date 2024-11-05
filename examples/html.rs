@@ -4,7 +4,7 @@ use moon_class::{
     util::{inc_v_from_str, rs_2_str, str_of_value},
     AsClassManager, ClassManager,
 };
-use view_manager::{AsViewManager, VNode, ViewProps};
+use view_manager::{AsElementProvider, AsViewManager, VNode, ViewProps};
 
 mod inner {
     use view_manager::AsViewManager;
@@ -97,6 +97,24 @@ impl AsClassManager for ViewManager {
     }
 }
 
+impl AsElementProvider for ViewManager {
+    type H = u64;
+
+    fn update_element(&mut self, id: u64, props: &ViewProps) {
+        log::debug!("update_element: id = {id}")
+    }
+
+    fn delete_element(&mut self, id: u64) {
+        log::debug!("delete_element: id = {id}")
+    }
+
+    fn create_element(&mut self, vnode_id: u64, class: &str) -> u64 {
+        log::debug!("create_element: id = {vnode_id}");
+
+        vnode_id
+    }
+}
+
 impl AsViewManager for ViewManager {
     fn get_class_view<'a, 'a1, 'f>(
         &'a self,
@@ -134,10 +152,6 @@ impl AsViewManager for ViewManager {
     fn rm_vnode(&mut self, id: u64) -> Option<VNode> {
         self.inner.vnode_mp.remove(&id)
     }
-
-    fn on_update_vnode_props(&mut self, id: u64, props: &ViewProps) {
-        log::info!("on_update_vnode_props: {id}, {:?}", props);
-    }
 }
 
 fn main() {
@@ -168,7 +182,7 @@ fn main() {
                     $props = $class[];
                     $child = $class[];
                     root = $source[];
-                dump[] = $result[];"
+                    dump[] = $result[];"
                 )
             ))
             .unwrap(),

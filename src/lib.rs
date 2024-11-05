@@ -7,10 +7,7 @@ use moon_class::AsClassManager;
 mod node;
 mod inner {
     use error_stack::ResultExt;
-    use moon_class::{
-        util::inc_v_from_str,
-        AsClassManager, ClassExecutor,
-    };
+    use moon_class::{util::inc_v_from_str, AsClassManager, ClassExecutor};
 
     use crate::{err, node::Node};
 
@@ -139,24 +136,18 @@ impl VNode {
     }
 }
 
-pub trait AsViewManager: AsClassManager {
-    fn get_class_view<'a, 'a1, 'f>(
-        &'a self,
-        class: &'a1 str,
-    ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'f>>
-    where
-        'a: 'f,
-        'a1: 'f;
+pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
+    fn on_update_vnode_props(&mut self, id: u64, props: &ViewProps) {
+        // Let the element be usable.
+        if self.get_vnode(&id).unwrap().view_props.class != props.class {
+            self.delete_element(id);
 
-    fn get_vnode(&self, id: &u64) -> Option<&VNode>;
+            self.create_element(id, &props.class);
+        }
 
-    fn get_vnode_mut(&mut self, id: &u64) -> Option<&mut VNode>;
-
-    fn new_vnode(&mut self, context: u64) -> u64;
-
-    fn rm_vnode(&mut self, id: u64) -> Option<VNode>;
-
-    fn on_update_vnode_props(&mut self, id: u64, props: &ViewProps);
+        // Let the element be updated.
+        self.update_element(id, props);
+    }
 
     fn event_entry<'a, 'a1, 'f>(
         &'a mut self,
@@ -272,4 +263,30 @@ pub trait AsViewManager: AsClassManager {
             Ok(())
         })
     }
+
+    fn get_class_view<'a, 'a1, 'f>(
+        &'a self,
+        class: &'a1 str,
+    ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f;
+
+    fn get_vnode(&self, id: &u64) -> Option<&VNode>;
+
+    fn get_vnode_mut(&mut self, id: &u64) -> Option<&mut VNode>;
+
+    fn new_vnode(&mut self, context: u64) -> u64;
+
+    fn rm_vnode(&mut self, id: u64) -> Option<VNode>;
+}
+
+pub trait AsElementProvider {
+    type H;
+
+    fn update_element(&mut self, id: Self::H, props: &ViewProps);
+
+    fn delete_element(&mut self, id: Self::H);
+
+    fn create_element(&mut self, vnode_id: u64, class: &str) -> Self::H;
 }
