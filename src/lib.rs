@@ -2,12 +2,16 @@
 
 use std::{future::Future, pin::Pin};
 
-use moon_class::AsClassManager;
+use error_stack::ResultExt;
+use moon_class::{util::inc_v_from_str, AsClassManager};
 
 mod node;
 mod inner {
     use error_stack::ResultExt;
-    use moon_class::{util::inc_v_from_str, AsClassManager, ClassExecutor};
+    use moon_class::{
+        util::{inc_v_from_str, Inc},
+        AsClassManager, ClassExecutor,
+    };
 
     use crate::{err, node::Node};
 
@@ -73,7 +77,7 @@ mod inner {
         context: u64,
         vnode_id: u64,
         state: &json::JsonValue,
-        script: &str,
+        inc_v: &[Inc],
     ) -> err::Result<json::JsonValue> {
         let mut ce = ClassExecutor::new(vm);
 
@@ -94,7 +98,7 @@ mod inner {
         .await
         .change_context(err::Error::RuntimeError)?;
 
-        ce.execute(&inc_v_from_str(script).change_context(err::Error::RuntimeError)?)
+        ce.execute(inc_v)
             .await
             .change_context(err::Error::RuntimeError)?;
 
@@ -149,32 +153,32 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         self.update_element(id, props);
     }
 
-    fn event_entry<'a, 'a1, 'f>(
+    fn event_entry<'a, 'a1, 'a2, 'f>(
         &'a mut self,
         vnode_id: u64,
         entry_name: &'a1 str,
-        data: json::JsonValue,
+        data: &'a2 json::JsonValue,
     ) -> Pin<Box<dyn Future<Output = err::Result<()>> + Send + 'f>>
     where
         'a: 'f,
         'a1: 'f,
+        'a2: 'f,
         Self: Sized,
     {
         Box::pin(async move {
             log::debug!("event_entry: {entry_name}");
             if let Some(vnode) = self.get_vnode(&vnode_id) {
-                log::debug!("event_entry: props={}", vnode.view_props.props);
                 let script = match vnode.view_props.props[entry_name].as_str() {
                     Some(s) => s.to_string(),
                     None => return Ok(()),
                 };
 
+                let inc_v = inc_v_from_str(&script).change_context(err::Error::RuntimeError)?;
                 let context = vnode.context;
 
                 let state = self.get_vnode(&context).unwrap().state.clone();
 
-                let rs =
-                    inner::event_handler(self, &data, context, vnode_id, &state, &script).await;
+                let rs = inner::event_handler(self, data, context, vnode_id, &state, &inc_v).await;
 
                 let n_state = rs?;
 

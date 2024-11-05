@@ -194,7 +194,7 @@ fn main() {
 
         println!("{}", inner::ser_html("  ", 0, &vm));
 
-        vm.event_entry(1, "$onclick", json::JsonValue::Null)
+        vm.event_entry(1, "$onclick", &json::JsonValue::Null)
             .await
             .unwrap();
 
