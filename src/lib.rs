@@ -2,20 +2,19 @@
 
 use std::{future::Future, pin::Pin};
 
-use inner_util::Node;
 use moon_class::AsClassManager;
 
-mod inner_util;
+mod node;
 mod inner {
     use error_stack::ResultExt;
     use moon_class::{
-        util::{inc_v_from_str, rs_2_str},
+        util::inc_v_from_str,
         AsClassManager, ClassExecutor,
     };
 
-    use crate::err;
+    use crate::{err, node::Node};
 
-    use super::{AsViewManager, Node, ViewProps};
+    use super::{AsViewManager, ViewProps};
 
     pub fn trunc_embeded(vnode_id: u64, vm: &mut impl AsViewManager, n_sz: usize) {
         let embeded_child_v = &mut vm.get_vnode_mut(&vnode_id).unwrap().embeded_child_v;
@@ -43,26 +42,22 @@ mod inner {
 
             let mut ce = ClassExecutor::new(vm);
 
+            ce.load_json("$state", "", &state)
+                .await
+                .change_context(err::Error::RuntimeError)?;
+            ce.load_json("$props", "", &view_props.props)
+                .await
+                .change_context(err::Error::RuntimeError)?;
+
             ce.execute(
-                &inc_v_from_str(&format!("{}", state.to_string()))
+                &inc_v_from_str(&format!("{vnode_id} = $vnode_id[];",))
                     .change_context(err::Error::RuntimeError)?,
             )
             .await
             .change_context(err::Error::RuntimeError)?;
-            ce.execute(
-                &inc_v_from_str(&format!("{}", view_props.props.to_string()))
-                    .change_context(err::Error::RuntimeError)?,
-            )
-            .await
-            .change_context(err::Error::RuntimeError)?;
-            ce.execute(
-                &inc_v_from_str(&format!("{}", vnode_id))
-                    .change_context(err::Error::RuntimeError)?,
-            )
-            .await
-            .change_context(err::Error::RuntimeError)?;
+
             Some(
-                super::inner_util::execute_as_node(
+                super::node::execute_as_node(
                     &inc_v_from_str(&script).change_context(err::Error::RuntimeError)?,
                     &mut ce,
                 )
@@ -85,30 +80,19 @@ mod inner {
     ) -> err::Result<json::JsonValue> {
         let mut ce = ClassExecutor::new(vm);
 
-        ce.execute(
-            &inc_v_from_str(&format!("append<'$event<, >', '{}'>", event.to_string()))
-                .change_context(err::Error::RuntimeError)?,
-        )
-        .await
-        .change_context(err::Error::RuntimeError)?;
-        ce.execute(
-            &inc_v_from_str(&format!("append<'$state<, >', '{}'>", state.to_string()))
-                .change_context(err::Error::RuntimeError)?,
-        )
-        .await
-        .change_context(err::Error::RuntimeError)?;
+        ce.load_json("$event", "", &event)
+            .await
+            .change_context(err::Error::RuntimeError)?;
+        ce.load_json("$state", "", &state)
+            .await
+            .change_context(err::Error::RuntimeError)?;
+
         ce.execute(
             &inc_v_from_str(&format!(
-                "append<'$context<, >', '{}'>",
-                context.to_string()
+                "{context} = $context[];
+                {vnode_id} = $vnode_id[];",
             ))
             .change_context(err::Error::RuntimeError)?,
-        )
-        .await
-        .change_context(err::Error::RuntimeError)?;
-        ce.execute(
-            &inc_v_from_str(&format!("append<'$vnode_id<, >', '{}'>", vnode_id))
-                .change_context(err::Error::RuntimeError)?,
         )
         .await
         .change_context(err::Error::RuntimeError)?;
@@ -117,14 +101,12 @@ mod inner {
             .await
             .change_context(err::Error::RuntimeError)?;
 
-        let rs = ce
-            .execute(&inc_v_from_str("$state<, >").change_context(err::Error::RuntimeError)?)
+        ce.dump_json(&["$state".to_string()], &[String::new()])
             .await
-            .change_context(err::Error::RuntimeError)?;
-
-        json::parse(&rs_2_str(&rs)).change_context(err::Error::RuntimeError)
+            .change_context(err::Error::RuntimeError)
     }
 }
+
 pub mod err;
 
 #[derive(PartialEq, Clone, Debug)]
@@ -138,7 +120,7 @@ pub struct VNode {
     pub view_props: ViewProps,
     pub state: json::JsonValue,
     pub embeded_child_v: Vec<u64>,
-    pub inner_node: Node<u64>,
+    pub inner_node: node::Node<u64>,
     pub context: u64,
 }
 
@@ -151,7 +133,7 @@ impl VNode {
             },
             state: json::object! {},
             embeded_child_v: vec![],
-            inner_node: Node::new(0),
+            inner_node: node::Node::new(0),
             context,
         }
     }
@@ -248,7 +230,7 @@ pub trait AsViewManager: AsClassManager {
             if let Some(inner_props_node) = inner::layout(vnode_id, &view_props, self).await? {
                 if self.get_vnode(&vnode_id).unwrap().inner_node.data == 0 {
                     self.get_vnode_mut(&vnode_id).unwrap().inner_node =
-                        Node::new(self.new_vnode(vnode_id));
+                        node::Node::new(self.new_vnode(vnode_id));
                 }
 
                 let inner_id = self.get_vnode(&vnode_id).unwrap().inner_node.data;

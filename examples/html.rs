@@ -1,7 +1,7 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use moon_class::{
-    util::{inc_v_from_str, rs_2_str},
+    util::{inc_v_from_str, rs_2_str, str_of_value},
     AsClassManager, ClassManager,
 };
 use view_manager::{AsViewManager, VNode, ViewProps};
@@ -141,25 +141,39 @@ impl AsViewManager for ViewManager {
 }
 
 fn main() {
+    env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("warn,html=debug,view_manager=debug"),
+    )
+    .init();
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
     rt.block_on(async {
-        env_logger::Builder::from_env(
-            env_logger::Env::default().default_filter_or("warn,html=debug,view_manager=debug"),
-        )
-        .init();
-
         let entry = ViewProps {
             class: "Main".to_string(),
             props: json::Null,
         };
         let mut cm = Box::new(ClassManager::new());
 
-        cm.execute(&inc_v_from_str("view[Main] = '$result[] = \\'[{\"$class\": [\"test\"]}]\\';';").unwrap())
-            .await
-            .unwrap();
+        cm.execute(
+            &inc_v_from_str(&format!(
+                "{} = view[Main];",
+                str_of_value(
+                    "test = $class[root];
+                    1 = $props[root];
+
+                    $class = $class[];
+                    $props = $class[];
+                    root = $source[];
+                dump[] = $result[];"
+                )
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
 
         let mut vm = ViewManager::new(entry, cm).await;
 
