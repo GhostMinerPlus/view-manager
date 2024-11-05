@@ -3,7 +3,10 @@
 use std::{future::Future, pin::Pin};
 
 use error_stack::ResultExt;
-use moon_class::{util::inc_v_from_str, AsClassManager};
+use moon_class::{
+    util::{inc_v_from_str, rs_2_str},
+    AsClassManager,
+};
 
 mod node;
 mod inner {
@@ -168,10 +171,18 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         Box::pin(async move {
             log::debug!("event_entry: {entry_name}");
             if let Some(vnode) = self.get_vnode(&vnode_id) {
-                let script = match vnode.view_props.props[entry_name].as_str() {
-                    Some(s) => s.to_string(),
-                    None => return Ok(()),
-                };
+                let script = &vnode.view_props.props[entry_name];
+
+                if script.is_empty() {
+                    return Ok(());
+                }
+
+                let script = rs_2_str(
+                    &script
+                        .members()
+                        .map(|jv| jv.as_str().unwrap().to_string())
+                        .collect::<Vec<String>>(),
+                );
 
                 let inc_v = inc_v_from_str(&script).change_context(err::Error::RuntimeError)?;
                 let context = vnode.context;
