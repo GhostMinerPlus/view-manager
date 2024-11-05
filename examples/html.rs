@@ -166,6 +166,7 @@ fn main() {
 
                     $class = $class[];
                     $props = $class[];
+                    $child = $class[];
                     root = $source[];
                 dump[] = $result[];"
                 )
