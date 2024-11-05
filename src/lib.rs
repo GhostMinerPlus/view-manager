@@ -69,7 +69,7 @@ mod inner {
 
     pub async fn event_handler(
         vm: &mut impl AsViewManager,
-        event: &json::JsonValue,
+        data: &json::JsonValue,
         context: u64,
         vnode_id: u64,
         state: &json::JsonValue,
@@ -77,7 +77,7 @@ mod inner {
     ) -> err::Result<json::JsonValue> {
         let mut ce = ClassExecutor::new(vm);
 
-        ce.load_json("$event", "", &event)
+        ce.load_json("$data", "", &data)
             .await
             .change_context(err::Error::RuntimeError)?;
         ce.load_json("$state", "", &state)
@@ -153,7 +153,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         &'a mut self,
         vnode_id: u64,
         entry_name: &'a1 str,
-        event: json::JsonValue,
+        data: json::JsonValue,
     ) -> Pin<Box<dyn Future<Output = err::Result<()>> + Send + 'f>>
     where
         'a: 'f,
@@ -174,7 +174,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
                 let state = self.get_vnode(&context).unwrap().state.clone();
 
                 let rs =
-                    inner::event_handler(self, &event, context, vnode_id, &state, &script).await;
+                    inner::event_handler(self, &data, context, vnode_id, &state, &script).await;
 
                 let n_state = rs?;
 
