@@ -13,7 +13,7 @@ mod inner {
     use error_stack::ResultExt;
     use moon_class::{
         util::{inc_v_from_str, Inc},
-        AsClassManager, ClassExecutor,
+        ClassExecutor,
     };
 
     use crate::{err, node::Node};
@@ -60,13 +60,7 @@ mod inner {
             .await
             .change_context(err::Error::RuntimeError)?;
 
-            Some(
-                super::node::execute_as_node(
-                    &inc_v_from_str(&script).change_context(err::Error::RuntimeError)?,
-                    &mut ce,
-                )
-                .await,
-            )
+            Some(super::node::execute_as_node(&script, &mut ce).await)
         } else {
             None
         };

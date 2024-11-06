@@ -1,4 +1,4 @@
-use moon_class::{util::Inc, AsClassManager};
+use moon_class::{AsClassManager, ClassExecutor};
 
 use super::ViewProps;
 
@@ -55,11 +55,11 @@ impl<Data> Node<Data> {
     }
 }
 
-pub async fn execute_as_node(
-    inc_v: &[Inc],
-    cm: &mut impl AsClassManager,
+pub async fn execute_as_node<CM: AsClassManager>(
+    script: &str,
+    cm: &mut ClassExecutor<'_, CM>,
 ) -> Node<ViewProps> {
-    let rs = cm.execute(inc_v).await.unwrap();
+    let rs = cm.execute_script(script).await.unwrap();
 
     let s = moon_class::util::rs_2_str(&rs);
 

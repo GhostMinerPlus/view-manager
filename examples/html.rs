@@ -1,8 +1,8 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use moon_class::{
-    util::{inc_v_from_str, rs_2_str, str_of_value},
-    AsClassManager, ClassManager,
+    util::{rs_2_str, str_of_value},
+    AsClassManager, ClassExecutor, ClassManager,
 };
 use view_manager::{AsElementProvider, AsViewManager, VNode, ViewProps};
 
@@ -95,6 +95,18 @@ impl AsClassManager for ViewManager {
     {
         self.cm.append(class, pair, item_v)
     }
+    
+    fn get_source<'a, 'a1, 'a2, 'f>(
+        &'a self,
+        target: &'a1 str,
+        class: &'a2 str,
+    ) -> Pin<Box<dyn moon_class::Fu<Output = moon_class::err::Result<Vec<String>>> + 'f>>
+    where
+        'a: 'f,
+        'a1: 'f,
+        'a2: 'f {
+        self.cm.get_source(target, class)
+    }
 }
 
 impl AsElementProvider for ViewManager {
@@ -171,24 +183,22 @@ fn main() {
         };
         let mut cm = Box::new(ClassManager::new());
 
-        cm.execute(
-            &inc_v_from_str(&format!(
+        ClassExecutor::new(&mut *cm)
+            .execute_script(&format!(
                 "{} = view[Main];",
                 str_of_value(
                     "test = $class[root];
                     1 = $props[root];
 
                     $class = $class[];
-                    $props = $class[];
-                    $child = $class[];
+                    $props += $class[];
+                    $child += $class[];
                     root = $source[];
-                    dump[] = $result[];"
+                    #dump[] = $result[];"
                 )
             ))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
 
         let mut vm = ViewManager::new(entry, cm).await;
 
