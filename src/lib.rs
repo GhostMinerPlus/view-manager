@@ -2,19 +2,13 @@
 
 use std::{future::Future, pin::Pin};
 
-use error_stack::ResultExt;
-use moon_class::{
-    util::{inc_v_from_str, rs_2_str},
-    AsClassManager,
-};
+use deno_cm::CmRuntime;
+use moon_class::{util::rs_2_str, AsClassManager};
 
 mod node;
 mod inner {
+    use deno_cm::CmRuntime;
     use error_stack::ResultExt;
-    use moon_class::{
-        util::{inc_v_from_str, Inc},
-        ClassExecutor,
-    };
 
     use crate::{err, node::Node};
 
@@ -32,9 +26,10 @@ mod inner {
 
     ///
     pub async fn layout(
+        vm: &mut impl AsViewManager,
+        cm_runtime: &mut CmRuntime,
         vnode_id: u64,
         view_props: &ViewProps,
-        vm: &mut impl AsViewManager,
     ) -> err::Result<Option<Node<ViewProps>>> {
         let rs = if let Some(script) = vm.get_class_view(&view_props.class).await {
             let state = vm
@@ -44,23 +39,17 @@ mod inner {
                 .state
                 .clone();
 
-            let mut ce = ClassExecutor::new(vm);
+            let pre_script = format!(
+                r#"const context = {{
+    state: {state},
+    props: {},
+    vnode_id: {vnode_id}
+}};
+"#,
+                view_props.props
+            );
 
-            ce.load_json("$state", "", &state)
-                .await
-                .change_context(err::Error::RuntimeError)?;
-            ce.load_json("$props", "", &view_props.props)
-                .await
-                .change_context(err::Error::RuntimeError)?;
-
-            ce.execute(
-                &inc_v_from_str(&format!("{vnode_id} = $vnode_id[];",))
-                    .change_context(err::Error::RuntimeError)?,
-            )
-            .await
-            .change_context(err::Error::RuntimeError)?;
-
-            Some(super::node::execute_as_node(&script, &mut ce).await)
+            Some(super::node::execute_as_node(format!("{pre_script}{script}"), cm_runtime).await)
         } else {
             None
         };
@@ -69,39 +58,34 @@ mod inner {
     }
 
     pub async fn event_handler(
-        vm: &mut impl AsViewManager,
+        cm_runtime: &mut CmRuntime,
         data: &json::JsonValue,
         context: u64,
         vnode_id: u64,
         state: &json::JsonValue,
-        inc_v: &[Inc],
+        script: String,
     ) -> err::Result<json::JsonValue> {
-        let mut ce = ClassExecutor::new(vm);
+        let pre_script = format!(
+            r#"const context = {{
+data: {data},
+state: {state},
+context: {context},
+vnode_id: {vnode_id}
+}};
+"#
+        );
 
-        ce.load_json("$data", "", &data)
-            .await
-            .change_context(err::Error::RuntimeError)?;
-        ce.load_json("$state", "", &state)
-            .await
-            .change_context(err::Error::RuntimeError)?;
+        let script = format!("{pre_script}{script}");
 
-        ce.execute(
-            &inc_v_from_str(&format!(
-                "{context} = $context[];
-                {vnode_id} = $vnode_id[];",
-            ))
-            .change_context(err::Error::RuntimeError)?,
-        )
-        .await
-        .change_context(err::Error::RuntimeError)?;
+        log::debug!("event_handler: script = {script}");
 
-        ce.execute(inc_v)
+        let s = cm_runtime
+            .execute_script_local(script)
             .await
-            .change_context(err::Error::RuntimeError)?;
+            .change_context(err::Error::RuntimeError)?
+            .to_string();
 
-        ce.dump_json(&["$state".to_string()], &[String::new()])
-            .await
-            .change_context(err::Error::RuntimeError)
+        Ok(json::parse(&s).unwrap())
     }
 }
 
@@ -150,16 +134,18 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         self.update_element(id, props);
     }
 
-    fn event_entry<'a, 'a1, 'a2, 'f>(
+    fn event_entry<'a, 'a1, 'a2, 'a3, 'f>(
         &'a mut self,
+        cm_runtime: &'a1 mut CmRuntime,
         vnode_id: u64,
-        entry_name: &'a1 str,
-        data: &'a2 json::JsonValue,
-    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + Send + 'f>>
+        entry_name: &'a2 str,
+        data: &'a3 json::JsonValue,
+    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
         'a2: 'f,
+        'a3: 'f,
         Self: Sized,
     {
         Box::pin(async move {
@@ -171,19 +157,23 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
                     return Ok(());
                 }
 
-                let script = rs_2_str(
-                    &script
-                        .members()
-                        .map(|jv| jv.as_str().unwrap().to_string())
-                        .collect::<Vec<String>>(),
-                );
+                let script = if script.is_array() {
+                    rs_2_str(
+                        &script
+                            .members()
+                            .map(|jv| jv.as_str().unwrap().to_string())
+                            .collect::<Vec<String>>(),
+                    )
+                } else {
+                    script.as_str().unwrap().to_string()
+                };
 
-                let inc_v = inc_v_from_str(&script).change_context(err::Error::RuntimeError)?;
                 let context = vnode.context;
 
                 let state = self.get_vnode(&context).unwrap().state.clone();
 
-                let rs = inner::event_handler(self, data, context, vnode_id, &state, &inc_v).await;
+                let rs =
+                    inner::event_handler(cm_runtime, data, context, vnode_id, &state, script).await;
 
                 let n_state = rs?;
 
@@ -192,6 +182,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
                 if n_state != state {
                     self.get_vnode_mut(&context).unwrap().state = n_state;
                     self.apply_props(
+                        cm_runtime,
                         context,
                         &self.get_vnode(&context).unwrap().view_props.clone(),
                         self.get_vnode(&context).unwrap().context,
@@ -207,11 +198,12 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 
     fn apply_props<'a, 'a1, 'f>(
         &'a mut self,
+        cm_runtime: &'a1 mut CmRuntime,
         vnode_id: u64,
         view_props: &'a1 ViewProps,
         embeded_id: u64,
         force: bool,
-    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + Send + 'f>>
+    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
@@ -227,7 +219,9 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 
             self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
 
-            if let Some(inner_props_node) = inner::layout(vnode_id, &view_props, self).await? {
+            if let Some(inner_props_node) =
+                inner::layout(self, cm_runtime, vnode_id, &view_props).await?
+            {
                 if self.get_vnode(&vnode_id).unwrap().inner_node.data == 0 {
                     self.get_vnode_mut(&vnode_id).unwrap().inner_node =
                         node::Node::new(self.new_vnode(vnode_id));
@@ -255,15 +249,27 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 
                         let child_id = self.get_vnode(&inner_id).unwrap().embeded_child_v[i];
 
-                        self.apply_props(child_id, &child_props.data, embeded_id, false)
-                            .await?;
+                        self.apply_props(
+                            cm_runtime,
+                            child_id,
+                            &child_props.data,
+                            embeded_id,
+                            false,
+                        )
+                        .await?;
                     }
 
                     inner::trunc_embeded(inner_id, self, inner_props_node.child_v.len());
                 }
 
-                self.apply_props(inner_id, &inner_props_node.data, inner_id, false)
-                    .await?;
+                self.apply_props(
+                    cm_runtime,
+                    inner_id,
+                    &inner_props_node.data,
+                    inner_id,
+                    false,
+                )
+                .await?;
             } else if self.get_vnode(&vnode_id).unwrap().inner_node.data != 0 {
                 let inner_id = self.get_vnode(&vnode_id).unwrap().inner_node.data;
                 inner::trunc_embeded(inner_id, self, 0);
@@ -276,7 +282,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
     fn get_class_view<'a, 'a1, 'f>(
         &'a self,
         class: &'a1 str,
-    ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'f>>
+    ) -> Pin<Box<dyn Future<Output = Option<String>> + 'f>>
     where
         'a: 'f,
         'a1: 'f;

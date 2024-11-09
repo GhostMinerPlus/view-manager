@@ -1,4 +1,4 @@
-use moon_class::{AsClassManager, ClassExecutor};
+use deno_cm::CmRuntime;
 
 use super::ViewProps;
 
@@ -16,8 +16,8 @@ mod inner {
         }
         Node::new_with_child_v(
             ViewProps {
-                class: root["$class"][0].as_str().unwrap().to_string(),
-                props: root["$props"][0].clone(),
+                class: root["$class"].as_str().unwrap().to_string(),
+                props: root["$props"].clone(),
             },
             root["$child"]
                 .members()
@@ -55,16 +55,13 @@ impl<Data> Node<Data> {
     }
 }
 
-pub async fn execute_as_node<CM: AsClassManager>(
-    script: &str,
-    cm: &mut ClassExecutor<'_, CM>,
-) -> Node<ViewProps> {
-    let rs = cm.execute_script(script).await.unwrap();
+pub async fn execute_as_node(script: String, cm_runtime: &mut CmRuntime) -> Node<ViewProps> {
+    log::debug!("execute_as_node: script = {script}");
 
-    let s = moon_class::util::rs_2_str(&rs);
+    let s = cm_runtime.execute_script_local(script).await.unwrap().to_string();
 
     log::debug!("execute_as_node: {s}");
 
-    let root_v = json::parse(&s).unwrap();
-    inner::parse_child(&root_v[0])
+    let root = json::parse(&s).unwrap();
+    inner::parse_child(&root)
 }
