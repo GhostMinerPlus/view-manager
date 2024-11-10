@@ -125,7 +125,7 @@ impl AsElementProvider for ViewManager {
         log::debug!("delete_element: id = {id}")
     }
 
-    fn create_element(&mut self, vnode_id: u64, _class: &str) -> u64 {
+    fn create_element(&mut self, vnode_id: u64, _class: &str, _props: &json::JsonValue) -> u64 {
         log::debug!("create_element: id = {vnode_id}");
 
         vnode_id

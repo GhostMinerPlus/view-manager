@@ -127,11 +127,11 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         if self.get_vnode(&id).unwrap().view_props.class != props.class {
             self.delete_element(id);
 
-            self.create_element(id, &props.class);
+            self.create_element(id, &props.class, &props.props);
+        } else {
+            // Let the element be updated.
+            self.update_element(id, &props.class, &props.props);
         }
-
-        // Let the element be updated.
-        self.update_element(id, &props.class, &props.props);
     }
 
     fn event_entry<'a, 'a1, 'a2, 'a3, 'f>(
@@ -303,5 +303,5 @@ pub trait AsElementProvider {
 
     fn delete_element(&mut self, id: Self::H);
 
-    fn create_element(&mut self, vnode_id: u64, class: &str) -> Self::H;
+    fn create_element(&mut self, vnode_id: u64, class: &str, props: &json::JsonValue) -> Self::H;
 }
