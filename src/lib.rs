@@ -177,9 +177,9 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 
                 let n_state = rs?;
 
-                log::debug!("new state: {n_state} in {context}");
+                if !n_state.is_null() && n_state != state {
+                    log::debug!("new state: {n_state} in {context}");
 
-                if n_state != state {
                     self.get_vnode_mut(&context).unwrap().state = n_state;
                     self.apply_props(
                         cm_runtime,
