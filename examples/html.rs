@@ -117,7 +117,7 @@ impl AsClassManager for ViewManager {
 impl AsElementProvider for ViewManager {
     type H = u64;
 
-    fn update_element(&mut self, id: u64, _props: &ViewProps) {
+    fn update_element(&mut self, id: u64, _class: &str, _props: &json::JsonValue) {
         log::debug!("update_element: id = {id}")
     }
 

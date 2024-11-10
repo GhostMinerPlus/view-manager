@@ -131,7 +131,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         }
 
         // Let the element be updated.
-        self.update_element(id, props);
+        self.update_element(id, &props.class, &props.props);
     }
 
     fn event_entry<'a, 'a1, 'a2, 'a3, 'f>(
@@ -299,7 +299,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 pub trait AsElementProvider {
     type H;
 
-    fn update_element(&mut self, id: Self::H, props: &ViewProps);
+    fn update_element(&mut self, id: Self::H, class: &str, props: &json::JsonValue);
 
     fn delete_element(&mut self, id: Self::H);
 
