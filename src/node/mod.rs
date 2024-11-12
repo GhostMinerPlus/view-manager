@@ -1,4 +1,6 @@
-use deno_cm::CmRuntime;
+use moon_class::util::executor::ClassExecutor;
+
+use crate::AsViewManager;
 
 use super::ViewProps;
 
@@ -16,8 +18,8 @@ mod inner {
         }
         Node::new_with_child_v(
             ViewProps {
-                class: root["$class"].as_str().unwrap().to_string(),
-                props: root["$props"].clone(),
+                class: root["$class"][0].as_str().unwrap().to_string(),
+                props: root["$props"][0].clone(),
             },
             root["$child"]
                 .members()
@@ -55,13 +57,16 @@ impl<Data> Node<Data> {
     }
 }
 
-pub async fn execute_as_node(script: String, cm_runtime: &mut CmRuntime) -> Node<ViewProps> {
+pub async fn execute_as_node(script: String, vm: &mut impl AsViewManager) -> Node<ViewProps> {
     log::debug!("execute_as_node: script = {script}");
 
-    let s = cm_runtime.execute_script_local(script).await.unwrap().to_string();
+    let mut ce = ClassExecutor::new(vm);
 
-    log::debug!("execute_as_node: {s}");
+    let rs = ce.execute_script(&script).await.unwrap();
 
-    let root = json::parse(&s).unwrap();
+    let root = ce.temp_ref().dump(&rs[0]);
+
+    log::debug!("execute_as_node: {root}");
+
     inner::parse_child(&root)
 }
