@@ -5,6 +5,9 @@ use crate::AsViewManager;
 use super::ViewProps;
 
 mod inner {
+    use error_stack::ResultExt;
+    use moon_class::err;
+
     use crate::ViewProps;
 
     use super::Node;
@@ -18,7 +21,14 @@ mod inner {
         }
         Node::new_with_child_v(
             ViewProps {
-                class: root["$class"][0].as_str().unwrap().to_string(),
+                class: root["$class"][0]
+                    .as_str()
+                    .ok_or(err::Error::RuntimeError)
+                    .attach_printable_lazy(|| {
+                        format!("root = {root}, root[$class] = {}", root["$class"])
+                    })
+                    .unwrap()
+                    .to_string(),
                 props: root["$props"][0].clone(),
             },
             root["$child"]
@@ -63,6 +73,8 @@ pub async fn execute_as_node(script: String, vm: &mut impl AsViewManager) -> Nod
     let mut ce = ClassExecutor::new(vm);
 
     let rs = ce.execute_script(&script).await.unwrap();
+
+    log::debug!("execute_as_node: root = {}", rs[0]);
 
     let root = ce.temp_ref().dump(&rs[0]);
 

@@ -72,14 +72,14 @@ impl AsClassManager for ViewManager {
     fn get<'a, 'a1, 'a2, 'f>(
         &'a self,
         class: &'a1 str,
-        pair: &'a2 str,
+        source: &'a2 str,
     ) -> Pin<Box<dyn moon_class::Fu<Output = moon_class::err::Result<Vec<String>>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
         'a2: 'f,
     {
-        self.cm.get(class, pair)
+        self.cm.get(class, source)
     }
 
     fn append<'a, 'a1, 'a2, 'f>(
@@ -169,7 +169,8 @@ impl AsViewManager for ViewManager {
 
 fn main() {
     env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("warn,html=debug,view_manager=debug"),
+        env_logger::Env::default()
+            .default_filter_or("warn,html=debug,view_manager=debug,moon_class=debug"),
     )
     .init();
 
@@ -189,16 +190,85 @@ fn main() {
 
         ce.execute_script(
             r#"
-<
-    {
-        $class: test,
-        $props: {
-            $onclick: <
-                1 := $result();
-            >
+<{
+    $class: div,
+    $child: [
+        {
+            $class: Input:window,
+            $props: {
+                $onresize: <#dump($data()) = @new_size(@window);>,
+                $onkeydown: <
+                    [
+                        {
+                            $case: <#inner({ $left: w, $right: $key($data())}) := $result();>,
+                            $then: <0.1 = $y($step);>
+                        },
+                        {
+                            $case: <#inner({ $left: s, $right: $key($data())}) := $result();>,
+                            $then: <-0.1 = $y($step);>
+                        },
+                        {
+                            $case: <1 := $result();>,
+                            $then: <0.0 = $y($step);>
+                        }
+                    ] = $switch();
+
+
+                    0.0 = $x($step);
+                    0.0 = $z($step);
+
+                    #dump($step) = @new_step(@camera);
+
+                    $() := $result();
+                >
+            }
+        },
+        {$class: Map}
+    ]
+} = $result();> = view(Main);
+
+<{
+    $class: div,
+    $child: [
+        {$class: Vision:light3, $props: {$position: [0.0, 5.0, 0.0]} },
+        {$class: Box, $props: {$body_type: dynamic, $position: [-1.0, 2.0, -3.0], $color: [0.2, 0.4, 1.0]} },
+        {$class: Box, $props: {$position: [-1.0, 0.0, -3.0], $color: [0.6, 1.0, 0.5]} }
+    ]
+} = $result();> = view(Map);
+
+<#if({
+    $left: $position($state()),
+    $right: $position($props())
+}) = $position();
+#if({
+    $left: $color($props()),
+    $right: [0.2, 0.4, 1.0]
+}) = $color();
+
+{
+    $class: div,
+    $child: [
+        {
+            $class: Vision:cube3,
+            $props: {
+                $position: $position(),
+                $color: $color()
+            }
+        },
+        {
+            $class: Physics:cube3,
+            $props: {
+                $position: $position($props()),
+                $body_type: $body_type($props()),
+                $onstep: <
+                    @moon_world_pos($vnode_id()) := $position($state());
+
+                    $state() = $result();
+                >
+            }
         }
-    } = $result();
-> := view(Main);
+    ]
+} = $result();> = view(Box);
         "#,
         )
         .await
