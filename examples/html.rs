@@ -1,8 +1,8 @@
-use std::{collections::HashMap, future::Future, pin::Pin};
+use std::{collections::HashMap, pin::Pin};
 
 use moon_class::{
     util::{executor::ClassExecutor, rs_2_str},
-    AsClassManager, ClassManager,
+    AsClassManager, ClassManager, Fu,
 };
 use view_manager::{AsElementProvider, AsViewManager, VNode, ViewProps};
 
@@ -132,7 +132,7 @@ impl AsViewManager for ViewManager {
     fn get_class_view<'a, 'a1, 'f>(
         &'a self,
         class: &'a1 str,
-    ) -> Pin<Box<dyn Future<Output = Option<String>> + 'f>>
+    ) -> Pin<Box<dyn Fu<Output = Option<String>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,

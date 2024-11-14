@@ -1,8 +1,8 @@
 //! A view manager, let all types of layout be as html.
 
-use std::{future::Future, pin::Pin};
+use std::pin::Pin;
 
-use moon_class::{util::rs_2_str, AsClassManager};
+use moon_class::{util::rs_2_str, AsClassManager, Fu};
 
 mod node;
 mod inner {
@@ -139,7 +139,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         vnode_id: u64,
         entry_name: &'a2 str,
         data: &'a3 json::JsonValue,
-    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + 'f>>
+    ) -> Pin<Box<dyn Fu<Output = err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
@@ -199,7 +199,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         view_props: &'a1 ViewProps,
         embeded_id: u64,
         force: bool,
-    ) -> Pin<Box<dyn Future<Output = err::Result<()>> + 'f>>
+    ) -> Pin<Box<dyn Fu<Output = err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
@@ -264,7 +264,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
     fn get_class_view<'a, 'a1, 'f>(
         &'a self,
         class: &'a1 str,
-    ) -> Pin<Box<dyn Future<Output = Option<String>> + 'f>>
+    ) -> Pin<Box<dyn Fu<Output = Option<String>> + 'f>>
     where
         'a: 'f,
         'a1: 'f;
