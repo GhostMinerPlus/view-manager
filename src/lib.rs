@@ -7,7 +7,7 @@ use moon_class::{util::rs_2_str, AsClassManager, Fu};
 mod node;
 mod inner {
     use error_stack::ResultExt;
-    use moon_class::util::executor::ClassExecutor;
+    use moon_class::util::executor::{ClassExecutor, ClassManagerHolder};
 
     use crate::{err, node::Node};
 

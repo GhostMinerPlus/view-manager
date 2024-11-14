@@ -1,4 +1,4 @@
-use moon_class::util::executor::ClassExecutor;
+use moon_class::util::executor::{ClassExecutor, ClassManagerHolder};
 
 use crate::AsViewManager;
 
@@ -67,7 +67,10 @@ impl<Data> Node<Data> {
     }
 }
 
-pub async fn execute_as_node(script: String, vm: &mut impl AsViewManager) -> Node<ViewProps> {
+pub async fn execute_as_node(
+    script: String,
+    vm: &mut impl AsViewManager,
+) -> Node<ViewProps> {
     log::debug!("execute_as_node: script = {script}");
 
     let mut ce = ClassExecutor::new(vm);
