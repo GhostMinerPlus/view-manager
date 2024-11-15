@@ -56,17 +56,18 @@ impl ViewManager {
 }
 
 impl AsClassManager for ViewManager {
-    fn clear<'a, 'a1, 'a2, 'f>(
+    fn remove<'a, 'a1, 'a2, 'f>(
         &'a mut self,
         class: &'a1 str,
-        pair: &'a2 str,
+        source: &'a2 str,
+        target_v: Vec<String>,
     ) -> Pin<Box<dyn moon_class::Fu<Output = moon_class::err::Result<()>> + 'f>>
     where
         'a: 'f,
         'a1: 'f,
         'a2: 'f,
     {
-        self.cm.clear(class, pair)
+        self.cm.remove(class, source, target_v)
     }
 
     fn get<'a, 'a1, 'a2, 'f>(
@@ -182,33 +183,6 @@ fn main() {
     $child: [
         {
             $class: Input:window,
-            $props: {
-                $onresize: <#dump($data()) = @new_size(@window);>,
-                $onkeydown: <
-                    [
-                        {
-                            $case: <#inner({ $left: w, $right: $key($data())}) := $result();>,
-                            $then: <0.1 = $y($step);>
-                        },
-                        {
-                            $case: <#inner({ $left: s, $right: $key($data())}) := $result();>,
-                            $then: <-0.1 = $y($step);>
-                        },
-                        {
-                            $case: <1 := $result();>,
-                            $then: <0.0 = $y($step);>
-                        }
-                    ] = $switch();
-
-
-                    0.0 = $x($step);
-                    0.0 = $z($step);
-
-                    #dump($step) = @new_step(@camera);
-
-                    $() := $result();
-                >
-            }
         },
         {$class: Map}
     ]
@@ -217,45 +191,25 @@ fn main() {
 <{
     $class: div,
     $child: [
-        {$class: Vision:light3, $props: {$position: [0.0, 5.0, 0.0]} },
-        {$class: Box, $props: {$body_type: dynamic, $position: [-1.0, 2.0, -3.0], $color: [0.2, 0.4, 1.0]} },
-        {$class: Box, $props: {$position: [-1.0, 0.0, -3.0], $color: [0.6, 1.0, 0.5]} }
+        {$class: Vision:light3},
+        {$class: Box},
+        {$class: Box}
     ]
 } = $result();> = view(Map);
 
-<#if({
-    $left: $position($state()),
-    $right: $position($props())
-}) = $position();
-#if({
-    $left: $color($props()),
-    $right: [0.2, 0.4, 1.0]
-}) = $color();
-
-{
-    $class: div,
-    $child: [
-        {
-            $class: Vision:cube3,
-            $props: {
-                $position: $position(),
-                $color: $color()
+<
+    {
+        $class: div,
+        $child: [
+            {
+                $class: Vision:cube3,
+            },
+            {
+                $class: Physics:cube3,
             }
-        },
-        {
-            $class: Physics:cube3,
-            $props: {
-                $position: $position($props()),
-                $body_type: $body_type($props()),
-                $onstep: <
-                    @moon_world_pos($vnode_id()) := $position($state());
-
-                    $state() = $result();
-                >
-            }
-        }
-    ]
-} = $result();> = view(Box);
+        ]
+    } = $result();
+> = view(Box);
         "#,
         )
         .await
