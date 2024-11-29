@@ -29,6 +29,7 @@ mod inner {
         trunc_embeded(id, vm, 0);
         if vm.get_vnode(&id).unwrap().context == parent {
             vm.rm_vnode(id);
+            vm.delete_element(id);
         }
     }
 
