@@ -207,7 +207,10 @@ fn main() {
             {
                 $class: Physics:cube3,
             }
-        ]
+        ],
+        $props: {
+            $type: set
+        }
     } = $result();
 > = view(Box);
         "#,

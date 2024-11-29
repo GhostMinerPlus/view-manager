@@ -91,10 +91,26 @@ mod inner {
 
 pub mod err;
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Eq)]
 pub struct ViewProps {
     pub class: String,
     pub props: json::JsonValue,
+}
+
+impl Ord for ViewProps {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl PartialOrd for ViewProps {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.class.partial_cmp(&other.class) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self.props.to_string().partial_cmp(&other.props.to_string())
+    }
 }
 
 #[derive(Clone)]
@@ -231,23 +247,109 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
                         self.get_vnode_mut(&inner_id).unwrap().embeded_child_v = embeded_child_v;
                     }
                 } else {
-                    for i in 0..inner_props_node.child_v.len() {
-                        let child_props = &inner_props_node.child_v[i];
-                        if let None = self.get_vnode(&inner_id).unwrap().embeded_child_v.get(i) {
-                            let new_id = self.new_vnode(vnode_id);
-                            self.get_vnode_mut(&inner_id)
-                                .unwrap()
-                                .embeded_child_v
-                                .push(new_id);
+                    let node_type = view_props.props["$type"][0].as_str().unwrap_or("list");
+
+                    match node_type {
+                        "set" => {
+                            let mut new_view_props_v = inner_props_node
+                                .child_v
+                                .iter()
+                                .map(|node| node.data.clone())
+                                .collect::<Vec<ViewProps>>();
+
+                            new_view_props_v.sort();
+
+                            let mut outdated_embeded_child_v =
+                                self.get_vnode(&inner_id).unwrap().embeded_child_v.clone();
+
+                            let mut i = 0;
+                            while i < outdated_embeded_child_v.len() {
+                                let id = outdated_embeded_child_v[i];
+                                let view_props = &self.get_vnode(&id).unwrap().view_props;
+
+                                match new_view_props_v.binary_search(view_props) {
+                                    Ok(index) => {
+                                        new_view_props_v.remove(index);
+                                        outdated_embeded_child_v.remove(i);
+
+                                        i -= 1;
+                                    }
+                                    Err(_) => (),
+                                }
+
+                                i += 1;
+                            }
+
+                            let addition_cnt = new_view_props_v.len() as i32
+                                - outdated_embeded_child_v.len() as i32;
+
+                            if addition_cnt > 0 {
+                                for i in 0..outdated_embeded_child_v.len() {
+                                    let id = outdated_embeded_child_v[i];
+                                    let view_props = new_view_props_v.remove(i);
+
+                                    self.apply_props(id, &view_props, embeded_id, false).await?;
+                                }
+
+                                for view_props in &new_view_props_v {
+                                    let new_id = self.new_vnode(vnode_id);
+                                    self.get_vnode_mut(&inner_id)
+                                        .unwrap()
+                                        .embeded_child_v
+                                        .push(new_id);
+
+                                    self.apply_props(new_id, view_props, embeded_id, false)
+                                        .await?;
+                                }
+                            } else {
+                                for i in 0..new_view_props_v.len() {
+                                    let id = outdated_embeded_child_v.remove(i);
+                                    let view_props = &new_view_props_v[i];
+
+                                    self.apply_props(id, view_props, embeded_id, false).await?;
+                                }
+
+                                let embeded_child_v =
+                                    &mut self.get_vnode_mut(&inner_id).unwrap().embeded_child_v;
+
+                                embeded_child_v.sort();
+
+                                for id in &outdated_embeded_child_v {
+                                    embeded_child_v
+                                        .remove(embeded_child_v.binary_search(id).unwrap());
+                                }
+
+                                for id in &outdated_embeded_child_v {
+                                    inner::trunc_embeded(*id, self, 0);
+                                    if self.get_vnode(id).unwrap().context == inner_id {
+                                        self.rm_vnode(*id);
+                                    }
+                                }
+                            }
                         }
+                        _ => {
+                            for i in 0..inner_props_node.child_v.len() {
+                                let child_props = &inner_props_node.child_v[i];
+                                if let None =
+                                    self.get_vnode(&inner_id).unwrap().embeded_child_v.get(i)
+                                {
+                                    let new_id = self.new_vnode(vnode_id);
+                                    self.get_vnode_mut(&inner_id)
+                                        .unwrap()
+                                        .embeded_child_v
+                                        .push(new_id);
+                                }
 
-                        let child_id = self.get_vnode(&inner_id).unwrap().embeded_child_v[i];
+                                let child_id =
+                                    self.get_vnode(&inner_id).unwrap().embeded_child_v[i];
 
-                        self.apply_props(child_id, &child_props.data, embeded_id, false)
-                            .await?;
+                                self.apply_props(child_id, &child_props.data, embeded_id, false)
+                                    .await?;
+                            }
+
+                            inner::trunc_embeded(inner_id, self, inner_props_node.child_v.len());
+                        }
                     }
-
-                    inner::trunc_embeded(inner_id, self, inner_props_node.child_v.len());
                 }
 
                 self.apply_props(inner_id, &inner_props_node.data, inner_id, false)
