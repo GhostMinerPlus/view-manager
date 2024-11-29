@@ -18,16 +18,16 @@ mod inner {
 
     use super::{AsViewManager, ViewProps};
 
-    pub fn trunc_embeded(vnode_id: u64, vm: &mut impl AsViewManager, n_sz: usize) {
+    pub fn trunc_embeded(vnode_id: u64, vm: &mut impl AsViewManager, n_sz: usize, context: u64) {
         let embeded_child_v = &mut vm.get_vnode_mut(&vnode_id).unwrap().embeded_child_v;
         for id in embeded_child_v.split_off(n_sz) {
-            remove_node(vm, vnode_id, id);
+            remove_node(vm, context, id);
         }
     }
 
-    pub fn remove_node(vm: &mut impl AsViewManager, parent: u64, id: u64) {
-        trunc_embeded(id, vm, 0);
-        if vm.get_vnode(&id).unwrap().context == parent {
+    pub fn remove_node(vm: &mut impl AsViewManager, context: u64, id: u64) {
+        trunc_embeded(id, vm, 0, context);
+        if vm.get_vnode(&id).unwrap().context == context {
             vm.rm_vnode(id);
             vm.delete_element(id);
         }
@@ -149,7 +149,7 @@ mod inner {
                     }
 
                     for (_, id) in &embeded_child_mp {
-                        remove_node(vm, inner_id, *id);
+                        remove_node(vm, context, *id);
                     }
                 }
                 "list" => {
@@ -177,7 +177,7 @@ mod inner {
                         .await;
                     }
 
-                    trunc_embeded(inner_id, vm, view_props_node.child_v.len());
+                    trunc_embeded(inner_id, vm, view_props_node.child_v.len(), context);
                 }
                 _ => todo!(),
             }
@@ -361,7 +361,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
                 .await;
             } else if self.get_vnode(&vnode_id).unwrap().inner_node.data != 0 {
                 let inner_id = self.get_vnode(&vnode_id).unwrap().inner_node.data;
-                inner::trunc_embeded(inner_id, self, 0);
+                inner::trunc_embeded(inner_id, self, 0, vnode_id);
                 self.rm_vnode(inner_id);
             }
 
