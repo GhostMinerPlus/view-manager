@@ -28,8 +28,8 @@ mod inner {
     pub fn remove_node(vm: &mut impl AsViewManager, context: u64, id: u64) {
         trunc_embeded(id, vm, 0, context);
         if vm.get_vnode(&id).unwrap().context == context {
-            vm.rm_vnode(id);
             vm.delete_element(id);
+            vm.rm_vnode(id);
         }
     }
 
@@ -110,76 +110,94 @@ mod inner {
         'a1: 'f,
     {
         Box::pin(async move {
-            let node_type = view_props_node.data.props["$type"][0]
-                .as_str()
-                .unwrap_or("list");
+            if !view_props_node.child_v.is_empty()
+                && view_props_node.child_v[0].data.class == "$child"
+            {
+                trunc_embeded(inner_id, vm, 0, context);
 
-            match node_type {
-                "set" => {
-                    let mut embeded_child_mp = BTreeMap::new();
+                vm.get_vnode_mut(&inner_id).unwrap().embeded_child_v = vm
+                    .get_vnode(&embeded_id)
+                    .unwrap()
+                    .inner_node
+                    .child_v
+                    .iter()
+                    .map(|node| node.data)
+                    .collect();
+            } else {
+                let node_type = view_props_node.data.props["$type"][0]
+                    .as_str()
+                    .unwrap_or("list");
 
-                    for id in &vm.get_vnode(&inner_id).unwrap().embeded_child_v {
-                        embeded_child_mp.insert(vm.get_vnode(id).unwrap().view_props.clone(), *id);
-                    }
+                match node_type {
+                    "set" => {
+                        let mut embeded_child_mp = BTreeMap::new();
 
-                    for node in &view_props_node.child_v {
-                        match embeded_child_mp.remove(&node.data) {
-                            Some(id) => {
-                                apply_inner_props_node(vm, context, id, node, embeded_id).await
-                            }
-                            None => {
-                                let new_id = vm.new_vnode(context);
-                                vm.get_vnode_mut(&inner_id)
-                                    .unwrap()
-                                    .embeded_child_v
-                                    .push(new_id);
+                        for id in &vm.get_vnode(&inner_id).unwrap().embeded_child_v {
+                            embeded_child_mp
+                                .insert(vm.get_vnode(id).unwrap().view_props.clone(), *id);
+                        }
 
-                                apply_inner_props_node(vm, context, new_id, node, embeded_id).await
+                        for node in &view_props_node.child_v {
+                            match embeded_child_mp.remove(&node.data) {
+                                Some(id) => {
+                                    apply_inner_props_node(vm, context, id, node, embeded_id).await
+                                }
+                                None => {
+                                    let new_id = vm.new_vnode(context);
+                                    vm.get_vnode_mut(&inner_id)
+                                        .unwrap()
+                                        .embeded_child_v
+                                        .push(new_id);
+
+                                    apply_inner_props_node(vm, context, new_id, node, embeded_id)
+                                        .await
+                                }
                             }
                         }
+
+                        let embeded_child_v =
+                            &mut vm.get_vnode_mut(&inner_id).unwrap().embeded_child_v;
+
+                        embeded_child_v.sort();
+
+                        for (_, id) in &embeded_child_mp {
+                            let index = embeded_child_v.binary_search(id).unwrap();
+                            embeded_child_v.remove(index);
+                        }
+
+                        for (_, id) in &embeded_child_mp {
+                            remove_node(vm, context, *id);
+                        }
                     }
+                    "list" => {
+                        for i in 0..view_props_node.child_v.len() {
+                            let child_id =
+                                match vm.get_vnode(&inner_id).unwrap().embeded_child_v.get(i) {
+                                    Some(r) => *r,
+                                    None => {
+                                        let new_id = vm.new_vnode(context);
+                                        vm.get_vnode_mut(&inner_id)
+                                            .unwrap()
+                                            .embeded_child_v
+                                            .push(new_id);
+                                        new_id
+                                    }
+                                };
 
-                    let embeded_child_v = &mut vm.get_vnode_mut(&inner_id).unwrap().embeded_child_v;
+                            apply_inner_props_node(
+                                vm,
+                                context,
+                                child_id,
+                                &view_props_node.child_v[i],
+                                embeded_id,
+                            )
+                            .await;
+                        }
 
-                    embeded_child_v.sort();
-
-                    for (_, id) in &embeded_child_mp {
-                        let index = embeded_child_v.binary_search(id).unwrap();
-                        embeded_child_v.remove(index);
+                        trunc_embeded(inner_id, vm, view_props_node.child_v.len(), context);
                     }
-
-                    for (_, id) in &embeded_child_mp {
-                        remove_node(vm, context, *id);
-                    }
+                    _ => todo!(),
                 }
-                "list" => {
-                    for i in 0..view_props_node.child_v.len() {
-                        let child_id = match vm.get_vnode(&inner_id).unwrap().embeded_child_v.get(i)
-                        {
-                            Some(r) => *r,
-                            None => {
-                                let new_id = vm.new_vnode(context);
-                                vm.get_vnode_mut(&inner_id)
-                                    .unwrap()
-                                    .embeded_child_v
-                                    .push(new_id);
-                                new_id
-                            }
-                        };
-
-                        apply_inner_props_node(
-                            vm,
-                            context,
-                            child_id,
-                            &view_props_node.child_v[i],
-                            embeded_id,
-                        )
-                        .await;
-                    }
-
-                    trunc_embeded(inner_id, vm, view_props_node.child_v.len(), context);
-                }
-                _ => todo!(),
             }
 
             vm.apply_props(inner_id, &view_props_node.data, inner_id, false)
@@ -322,19 +340,6 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         Self: Sized,
     {
         Box::pin(async move {
-            if view_props.class == "$child" {
-                self.get_vnode_mut(&vnode_id).unwrap().embeded_child_v = self
-                    .get_vnode(&embeded_id)
-                    .unwrap()
-                    .inner_node
-                    .child_v
-                    .iter()
-                    .map(|node| node.data)
-                    .collect();
-
-                return Ok(());
-            }
-
             if !force && self.get_vnode(&vnode_id).unwrap().view_props == *view_props {
                 return Ok(());
             }
