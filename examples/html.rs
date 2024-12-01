@@ -13,9 +13,9 @@ mod inner {
 
     pub fn ser_html(space: &str, id: u64, vm: &ViewManager) -> String {
         let vnode = vm.get_vnode(&id).unwrap();
-        if vnode.inner_node.data != 0 {
+        if vnode.inner_id != 0 {
             // virtual container
-            ser_html(&format!("{space}{space}"), vnode.inner_node.data, vm)
+            ser_html(&format!("{space}{space}"), vnode.inner_id, vm)
         } else {
             // meta container
             let mut html = format!("{space}<{}>", vnode.view_props.class);
