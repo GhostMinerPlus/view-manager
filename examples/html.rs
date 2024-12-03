@@ -1,10 +1,16 @@
-use std::{collections::HashMap, pin::Pin};
+use std::{
+    collections::{BTreeMap, HashMap},
+    pin::Pin,
+};
 
 use moon_class::{
     util::{executor::ClassExecutor, rs_2_str},
     AsClassManager, ClassManager, Fu,
 };
-use view_manager::{AsElementProvider, AsViewManager, VNode, ViewProps};
+use view_manager::{
+    bean::{VNode, ViewProps},
+    AsElementProvider, AsViewManager,
+};
 
 mod inner {
     use view_manager::AsViewManager;
@@ -36,6 +42,7 @@ struct InnerViewManager {
 struct ViewManager {
     inner: InnerViewManager,
     cm: Box<dyn AsClassManager>,
+    dirty_vnode_v: BTreeMap<u64, Option<ViewProps>>,
 }
 
 impl ViewManager {
@@ -46,12 +53,13 @@ impl ViewManager {
                 vnode_mp: HashMap::new(),
             },
             cm: Box::new(dm),
+            dirty_vnode_v: BTreeMap::new(),
         }
     }
 
     pub async fn init(&mut self, entry: ViewProps) {
         let root_id = self.new_vnode(0);
-        self.apply_props(root_id, &entry, 0, true).await.unwrap();
+        self.apply_props(root_id, Some(entry)).await.unwrap();
     }
 }
 
@@ -153,6 +161,10 @@ impl AsViewManager for ViewManager {
     fn rm_vnode(&mut self, id: u64) -> Option<VNode> {
         self.inner.vnode_mp.remove(&id)
     }
+
+    fn dirty_vnode_v_mut(&mut self) -> &mut BTreeMap<u64, Option<ViewProps>> {
+        &mut self.dirty_vnode_v
+    }
 }
 
 fn main() {
@@ -220,11 +232,17 @@ fn main() {
 
         vm.init(entry).await;
 
-        println!("{}", inner::ser_html("  ", 0, &vm));
+        loop {
+            let dirty_vnode_v = std::mem::take(vm.dirty_vnode_v_mut());
 
-        vm.event_entry(1, "$onclick", &json::JsonValue::Null)
-            .await
-            .unwrap();
+            if dirty_vnode_v.is_empty() {
+                break;
+            }
+
+            for (vnode_id, view_props_op) in dirty_vnode_v {
+                vm.apply_props(vnode_id, view_props_op).await.unwrap();
+            }
+        }
 
         println!("{}", inner::ser_html("  ", 0, &vm));
     })

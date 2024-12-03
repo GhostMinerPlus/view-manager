@@ -1,14 +1,12 @@
 use moon_class::util::executor::{ClassExecutor, ClassManagerHolder};
 
-use crate::AsViewManager;
-
-use super::ViewProps;
+use crate::{bean::ViewProps, AsViewManager};
 
 mod inner {
     use error_stack::ResultExt;
     use moon_class::err;
 
-    use crate::ViewProps;
+    use crate::bean::ViewProps;
 
     use super::Node;
 

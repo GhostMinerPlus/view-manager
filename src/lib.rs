@@ -1,6 +1,6 @@
 //! A view manager, let all types of layout be as html.
 
-use std::pin::Pin;
+use std::{collections::BTreeMap, pin::Pin};
 
 use moon_class::{util::rs_2_str, AsClassManager, Fu};
 
@@ -14,9 +14,9 @@ mod inner {
         Fu,
     };
 
-    use crate::{err, node::Node};
+    use crate::{bean::ViewProps, err, node::Node};
 
-    use super::{AsViewManager, ViewProps};
+    use super::AsViewManager;
 
     pub fn trunc_embeded(vnode_id: u64, vm: &mut impl AsViewManager, n_sz: usize) {
         let embeded_child_v = &mut match vm.get_vnode_mut(&vnode_id) {
@@ -220,63 +220,22 @@ mod inner {
                 }
             }
 
-            vm.apply_props(vnode_id, &view_props_node.data, vnode_id, false)
-                .await
-                .unwrap();
+            let vnode = vm.get_vnode_mut(&vnode_id).unwrap();
+
+            if vnode.view_props != view_props_node.data {
+                vnode.is_dirty = true;
+                vm.dirty_vnode_v_mut()
+                    .insert(vnode_id, Some(view_props_node.data.clone()));
+            }
         })
     }
 }
 
+pub mod bean;
 pub mod err;
 
-#[derive(PartialEq, Clone, Debug, Eq)]
-pub struct ViewProps {
-    pub class: String,
-    pub props: json::JsonValue,
-}
-
-impl Ord for ViewProps {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
-impl PartialOrd for ViewProps {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.class.partial_cmp(&other.class) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
-        }
-        self.props.to_string().partial_cmp(&other.props.to_string())
-    }
-}
-
-#[derive(Clone)]
-pub struct VNode {
-    pub view_props: ViewProps,
-    pub state: json::JsonValue,
-    pub inner_id: u64,
-    pub embeded_child_v: Vec<u64>,
-    pub context: u64,
-}
-
-impl VNode {
-    pub fn new(context: u64) -> Self {
-        Self {
-            view_props: ViewProps {
-                class: String::new(),
-                props: json::Null,
-            },
-            state: json::object! {},
-            inner_id: 0,
-            embeded_child_v: vec![],
-            context,
-        }
-    }
-}
-
 pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
-    fn on_update_vnode_props(&mut self, id: u64, props: &ViewProps) {
+    fn on_update_vnode_props(&mut self, id: u64, props: &bean::ViewProps) {
         // Let the element be usable.
         if self.get_vnode(&id).unwrap().view_props.class != props.class {
             self.delete_element(id);
@@ -331,49 +290,62 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 
                 if !n_state.is_null() && n_state != state {
                     log::debug!("new state: {n_state} in {context}");
+                    let vnode = self.get_vnode_mut(&context).unwrap();
 
-                    self.get_vnode_mut(&context).unwrap().state = n_state;
-                    self.apply_props(
-                        context,
-                        &self.get_vnode(&context).unwrap().view_props.clone(),
-                        self.get_vnode(&context).unwrap().context,
-                        true,
-                    )
-                    .await
-                    .unwrap();
+                    vnode.state = n_state;
+                    vnode.is_dirty = true;
+                    self.dirty_vnode_v_mut().insert(context, None);
                 }
             }
             Ok(())
         })
     }
 
-    fn apply_props<'a, 'a1, 'f>(
+    fn dirty_vnode_v_mut(&mut self) -> &mut BTreeMap<u64, Option<bean::ViewProps>>;
+
+    fn apply_props<'a, 'f>(
         &'a mut self,
         vnode_id: u64,
-        view_props: &'a1 ViewProps,
-        embeded_id: u64,
-        force: bool,
+        view_props_op: Option<bean::ViewProps>,
     ) -> Pin<Box<dyn Fu<Output = err::Result<()>> + 'f>>
     where
         'a: 'f,
-        'a1: 'f,
         Self: Sized,
     {
         Box::pin(async move {
-            if !force && self.get_vnode(&vnode_id).unwrap().view_props == *view_props {
+            let vnode = self.get_vnode_mut(&vnode_id).unwrap();
+
+            if !vnode.is_dirty {
                 return Ok(());
+            } else {
+                vnode.is_dirty = false;
             }
 
-            self.on_update_vnode_props(vnode_id, view_props);
+            let view_props = if let Some(view_props) = view_props_op {
+                let is_same_props = vnode.view_props == view_props;
 
-            self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
+                if is_same_props {
+                    return Ok(());
+                }
+
+                self.on_update_vnode_props(vnode_id, &view_props);
+
+                self.get_vnode_mut(&vnode_id).unwrap().view_props = view_props.clone();
+
+                view_props
+            } else {
+                vnode.view_props.clone()
+            };
 
             if let Some(inner_props_node) = inner::layout(self, vnode_id, &view_props).await? {
                 if self.get_vnode(&vnode_id).unwrap().inner_id == 0 {
                     self.get_vnode_mut(&vnode_id).unwrap().inner_id = self.new_vnode(vnode_id);
                 }
 
-                let inner_id = self.get_vnode(&vnode_id).unwrap().inner_id;
+                let vnode = self.get_vnode(&vnode_id).unwrap();
+
+                let inner_id = vnode.inner_id;
+                let embeded_id = vnode.context;
 
                 inner::apply_inner_props_node(
                     self,
@@ -400,13 +372,13 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         'a: 'f,
         'a1: 'f;
 
-    fn get_vnode(&self, id: &u64) -> Option<&VNode>;
+    fn get_vnode(&self, id: &u64) -> Option<&bean::VNode>;
 
-    fn get_vnode_mut(&mut self, id: &u64) -> Option<&mut VNode>;
+    fn get_vnode_mut(&mut self, id: &u64) -> Option<&mut bean::VNode>;
 
     fn new_vnode(&mut self, context: u64) -> u64;
 
-    fn rm_vnode(&mut self, id: u64) -> Option<VNode>;
+    fn rm_vnode(&mut self, id: u64) -> Option<bean::VNode>;
 }
 
 pub trait AsElementProvider {
