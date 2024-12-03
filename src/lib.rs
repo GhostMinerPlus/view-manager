@@ -313,7 +313,12 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
         Self: Sized,
     {
         Box::pin(async move {
-            let vnode = self.get_vnode_mut(&vnode_id).unwrap();
+            let vnode = match self.get_vnode_mut(&vnode_id) {
+                Some(r) => r,
+                None => {
+                    return Ok(());
+                }
+            };
 
             if !vnode.is_dirty {
                 return Ok(());
