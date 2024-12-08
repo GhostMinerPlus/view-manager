@@ -28,10 +28,11 @@ pub struct VNode {
     pub embeded_child_v: Vec<u64>,
     pub context: u64,
     pub is_dirty: bool,
+    pub parent_op: Option<u64>,
 }
 
 impl VNode {
-    pub fn new(context: u64) -> Self {
+    pub fn new(context: u64, parent_op: Option<u64>) -> Self {
         Self {
             view_props: ViewProps {
                 class: String::new(),
@@ -42,6 +43,7 @@ impl VNode {
             embeded_child_v: vec![],
             context,
             is_dirty: true,
+            parent_op,
         }
     }
 }

@@ -14,7 +14,11 @@ mod inner {
         Fu,
     };
 
-    use crate::{bean::ViewProps, err, node::Node};
+    use crate::{
+        bean::{VNode, ViewProps},
+        err,
+        node::Node,
+    };
 
     use super::AsViewManager;
 
@@ -133,8 +137,13 @@ mod inner {
             {
                 trunc_embeded(vnode_id, vm, 0);
 
-                vm.get_vnode_mut(&vnode_id).unwrap().embeded_child_v =
-                    vm.get_vnode(&embeded_id).unwrap().embeded_child_v.clone();
+                let embeded_child_v = vm.get_vnode(&embeded_id).unwrap().embeded_child_v.clone();
+
+                for id in &embeded_child_v {
+                    vm.get_vnode_mut(id).unwrap().parent_op = Some(vnode_id);
+                }
+
+                vm.get_vnode_mut(&vnode_id).unwrap().embeded_child_v = embeded_child_v;
             } else {
                 let node_type = view_props_node.data.props["$type"][0]
                     .as_str()
@@ -155,7 +164,7 @@ mod inner {
                                     apply_inner_props_node(vm, context, id, node, embeded_id).await
                                 }
                                 None => {
-                                    let new_id = vm.new_vnode(context);
+                                    let new_id = vm.new_vnode(VNode::new(context, Some(vnode_id)));
                                     vm.get_vnode_mut(&vnode_id)
                                         .unwrap()
                                         .embeded_child_v
@@ -187,7 +196,7 @@ mod inner {
                         if diff > 0 {
                             let new_id_v = (0..diff)
                                 .into_iter()
-                                .map(|_| vm.new_vnode(context))
+                                .map(|_| vm.new_vnode(VNode::new(context, Some(vnode_id))))
                                 .collect::<Vec<u64>>();
 
                             vm.get_vnode_mut(&vnode_id)
@@ -326,6 +335,8 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
                 vnode.is_dirty = false;
             }
 
+            let parent_op = vnode.parent_op;
+
             let view_props = if let Some(view_props) = view_props_op {
                 let is_same_props = vnode.view_props == view_props;
 
@@ -344,7 +355,8 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 
             if let Some(inner_props_node) = inner::layout(self, vnode_id, &view_props).await? {
                 if self.get_vnode(&vnode_id).unwrap().inner_id == 0 {
-                    self.get_vnode_mut(&vnode_id).unwrap().inner_id = self.new_vnode(vnode_id);
+                    self.get_vnode_mut(&vnode_id).unwrap().inner_id =
+                        self.new_vnode(bean::VNode::new(vnode_id, parent_op));
                 }
 
                 let vnode = self.get_vnode(&vnode_id).unwrap();
@@ -362,7 +374,10 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
                 .await;
             } else if self.get_vnode(&vnode_id).unwrap().inner_id != 0 {
                 let inner_id = self.get_vnode(&vnode_id).unwrap().inner_id;
+
                 inner::remove_node(self, inner_id);
+
+                self.get_vnode_mut(&vnode_id).unwrap().inner_id = 0;
             }
 
             Ok(())
@@ -381,7 +396,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 
     fn get_vnode_mut(&mut self, id: &u64) -> Option<&mut bean::VNode>;
 
-    fn new_vnode(&mut self, context: u64) -> u64;
+    fn new_vnode(&mut self, vnode: bean::VNode) -> u64;
 
     fn rm_vnode(&mut self, id: u64) -> Option<bean::VNode>;
 }

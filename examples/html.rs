@@ -58,7 +58,7 @@ impl ViewManager {
     }
 
     pub async fn init(&mut self, entry: ViewProps) {
-        let root_id = self.new_vnode(0);
+        let root_id = self.new_vnode(VNode::new(0, None));
         self.apply_props(root_id, Some(entry)).await.unwrap();
     }
 }
@@ -151,10 +151,10 @@ impl AsViewManager for ViewManager {
         self.inner.vnode_mp.get_mut(id)
     }
 
-    fn new_vnode(&mut self, context: u64) -> u64 {
+    fn new_vnode(&mut self, vnode: VNode) -> u64 {
         let new_id = self.inner.unique_id;
         self.inner.unique_id += 1;
-        self.inner.vnode_mp.insert(new_id, VNode::new(context));
+        self.inner.vnode_mp.insert(new_id, vnode);
         new_id
     }
 
