@@ -250,9 +250,10 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
             self.delete_element(id);
 
             self.create_element(id, &props.class, &props.props);
-        } else {
-            // Let the element be updated.
-            self.update_element(id, &props.class, &props.props);
+        } else if !self.reuse_element(id, &props.class, &props.props) {
+            self.delete_element(id);
+
+            self.create_element(id, &props.class, &props.props);
         }
     }
 
@@ -404,7 +405,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 pub trait AsElementProvider {
     type H;
 
-    fn update_element(&mut self, id: Self::H, class: &str, props: &json::JsonValue);
+    fn reuse_element(&mut self, id: Self::H, class: &str, props: &json::JsonValue) -> bool;
 
     fn delete_element(&mut self, id: Self::H);
 
