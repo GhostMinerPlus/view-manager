@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeMap, pin::Pin};
 
+use json::JsonValue;
 use moon_class::{util::rs_2_str, AsClassManager, Fu};
 
 mod node;
@@ -92,7 +93,7 @@ mod inner {
         vnode_id: u64,
         state: &json::JsonValue,
         script: String,
-    ) -> err::Result<json::JsonValue> {
+    ) -> err::Result<()> {
         let pre_script = format!(
             r#"
 {data} = $data();
@@ -108,16 +109,11 @@ mod inner {
 
         let mut ce = ClassExecutor::new(vm);
 
-        let rs = ce
-            .execute_script(&script)
+        ce.execute_script(&script)
             .await
             .change_context(err::Error::RuntimeError)?;
 
-        Ok(if rs.is_empty() {
-            json::Null
-        } else {
-            ce.temp_ref().dump(&rs[0])
-        })
+        Ok(())
     }
 
     pub fn apply_inner_props_node<'a, 'a1, 'f>(
@@ -294,21 +290,19 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
 
                 let state = self.get_vnode(&context).unwrap().state.clone();
 
-                let rs = inner::event_handler(self, data, context, vnode_id, &state, script).await;
-
-                let n_state = rs?;
-
-                if !n_state.is_null() && n_state != state {
-                    log::debug!("new state: {n_state} in {context}");
-                    let vnode = self.get_vnode_mut(&context).unwrap();
-
-                    vnode.state = n_state;
-                    vnode.is_dirty = true;
-                    self.dirty_vnode_v_mut().insert(context, None);
-                }
+                inner::event_handler(self, data, context, vnode_id, &state, script).await?;
             }
             Ok(())
         })
+    }
+
+    fn update_state(&mut self, vnode_id: u64, n_state: json::JsonValue) {
+        log::debug!("new state: {n_state} in {vnode_id}");
+        let vnode = self.get_vnode_mut(&vnode_id).unwrap();
+
+        vnode.state = n_state;
+        vnode.is_dirty = true;
+        self.dirty_vnode_v_mut().insert(vnode_id, None);
     }
 
     fn dirty_vnode_v_mut(&mut self) -> &mut BTreeMap<u64, Option<bean::ViewProps>>;
