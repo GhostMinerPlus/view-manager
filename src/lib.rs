@@ -2,7 +2,6 @@
 
 use std::{collections::BTreeMap, pin::Pin};
 
-use json::JsonValue;
 use moon_class::{util::rs_2_str, AsClassManager, Fu};
 
 mod node;
@@ -11,7 +10,7 @@ mod inner {
 
     use error_stack::ResultExt;
     use moon_class::{
-        util::executor::{ClassExecutor, ClassManagerHolder},
+        util::executor::ClassExecutor,
         Fu,
     };
 
@@ -89,16 +88,12 @@ mod inner {
     pub async fn event_handler(
         vm: &mut impl AsViewManager,
         data: &json::JsonValue,
-        context: u64,
         vnode_id: u64,
-        state: &json::JsonValue,
         script: String,
     ) -> err::Result<()> {
         let pre_script = format!(
             r#"
 {data} = $data();
-{state} = $state();
-{context} = $context();
 {vnode_id} = $vnode_id();
 "#
         );
@@ -286,11 +281,7 @@ pub trait AsViewManager: AsClassManager + AsElementProvider<H = u64> {
                     script.as_str().unwrap().to_string()
                 };
 
-                let context = vnode.context;
-
-                let state = self.get_vnode(&context).unwrap().state.clone();
-
-                inner::event_handler(self, data, context, vnode_id, &state, script).await?;
+                inner::event_handler(self, data, vnode_id, script).await?;
             }
             Ok(())
         })
