@@ -77,7 +77,7 @@ pub async fn execute_as_node(
 
     log::debug!("execute_as_node: root = {}", rs[0]);
 
-    let root = ce.temp_ref().dump(&rs[0]);
+    let root = ce.dump(&rs[0]).await;
 
     log::debug!("execute_as_node: {root}");
 
