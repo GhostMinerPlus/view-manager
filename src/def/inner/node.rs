@@ -1,6 +1,6 @@
-use moon_class::util::executor::{ClassExecutor, ClassManagerHolder};
+use moon_class::executor::{def::AsClassManagerHolder, ClassExecutor};
 
-use crate::{bean::ViewProps, AsViewManager};
+use crate::{bean::ViewProps, def::AsViewManager};
 
 mod inner {
     use error_stack::ResultExt;
@@ -65,10 +65,7 @@ impl<Data> Node<Data> {
     }
 }
 
-pub async fn execute_as_node(
-    script: String,
-    vm: &mut impl AsViewManager,
-) -> Node<ViewProps> {
+pub async fn execute_as_node(script: String, vm: &mut impl AsViewManager) -> Node<ViewProps> {
     log::debug!("execute_as_node: script = {script}");
 
     let mut ce = ClassExecutor::new(vm);

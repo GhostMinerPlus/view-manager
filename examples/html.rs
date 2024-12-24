@@ -9,11 +9,11 @@ use moon_class::{
 };
 use view_manager::{
     bean::{VNode, ViewProps},
-    AsElementProvider, AsViewManager,
+    def::{AsElementProvider, AsViewManager},
 };
 
 mod inner {
-    use view_manager::AsViewManager;
+    use view_manager::def::AsViewManager;
 
     use crate::ViewManager;
 
